@@ -58,3 +58,13 @@ O teste de integração com o Ollama real é opt-in. No PowerShell:
 $env:SIEAR_OLLAMA_INTEGRATION='true'
 npm exec vitest run electron/services/ai/report-extraction.integration.test.ts
 ```
+
+## Modelos de relatório
+
+Os modelos são gerenciados no Main Process por `ReportTemplateService`, apoiado pela abstração `ReportTemplateRepository`. A implementação atual, `InMemoryReportTemplateRepository`, mantém os dados somente durante a execução e poderá ser substituída futuramente por SQLite sem alterar o contrato do Renderer.
+
+Fluxo:
+
+`React → window.siear.templates → preload → templates:* → ReportTemplateService → InMemoryReportTemplateRepository`
+
+O modelo inicial “Relatório Técnico” define quatro seções obrigatórias e regras básicas de escrita. A interface permite visualizar, criar, editar, excluir e selecionar modelos; a seleção ainda não gera relatórios.

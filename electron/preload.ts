@@ -8,6 +8,14 @@ const siearApi: SiearApi = {
     extractReportInformation: (request) =>
       ipcRenderer.invoke('ai:extract-report-information', request),
   },
+  templates: {
+    getAll: () => ipcRenderer.invoke('templates:get-all'),
+    getById: (id) => ipcRenderer.invoke('templates:get-by-id', id),
+    create: (template) => ipcRenderer.invoke('templates:create', template),
+    update: (id, template) =>
+      ipcRenderer.invoke('templates:update', id, template),
+    delete: (id) => ipcRenderer.invoke('templates:delete', id),
+  },
 }
 
 contextBridge.exposeInMainWorld('siear', siearApi)

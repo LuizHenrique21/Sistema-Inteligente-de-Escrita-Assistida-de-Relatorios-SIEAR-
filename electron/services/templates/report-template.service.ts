@@ -2,9 +2,7 @@ import type { ReportTemplate } from '../../../src/types/report-template'
 import type { ReportTemplateRepository } from '../../repositories/templates/report-template.repository'
 
 export type ReportTemplateServiceErrorCode =
-  | 'VALIDATION_ERROR'
-  | 'NOT_FOUND'
-  | 'DUPLICATE_ID'
+  'VALIDATION_ERROR' | 'NOT_FOUND' | 'DUPLICATE_ID'
 
 export class ReportTemplateServiceError extends Error {
   constructor(
@@ -14,6 +12,50 @@ export class ReportTemplateServiceError extends Error {
     super(message)
     this.name = 'ReportTemplateServiceError'
   }
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+export function isReportTemplate(value: unknown): value is ReportTemplate {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+
+  const template = value as Record<string, unknown>
+  if (!Array.isArray(template.sections)) return false
+
+  const validSections = template.sections.every((value: unknown) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return false
+    }
+    const section = value as Record<string, unknown>
+    return (
+      typeof section.id === 'string' &&
+      typeof section.name === 'string' &&
+      typeof section.description === 'string' &&
+      typeof section.required === 'boolean' &&
+      typeof section.order === 'number' &&
+      Number.isInteger(section.order)
+    )
+  })
+
+  return (
+    typeof template.id === 'string' &&
+    typeof template.name === 'string' &&
+    typeof template.description === 'string' &&
+    typeof template.objective === 'string' &&
+    typeof template.tone === 'string' &&
+    typeof template.style === 'string' &&
+    (template.formality === 'low' ||
+      template.formality === 'medium' ||
+      template.formality === 'high') &&
+    validSections &&
+    isStringArray(template.writingRules) &&
+    isStringArray(template.recommendedVocabulary) &&
+    isStringArray(template.forbiddenExpressions)
+  )
 }
 
 function requireText(value: string, field: string): void {
@@ -93,8 +135,8 @@ export class ReportTemplateService {
   }
 
   async create(template: ReportTemplate): Promise<ReportTemplate> {
-    validateTemplate(template)
     const normalized = normalizeTemplate(template)
+    validateTemplate(normalized)
     if (await this.repository.findById(normalized.id)) {
       throw new ReportTemplateServiceError(
         'DUPLICATE_ID',
@@ -104,18 +146,16 @@ export class ReportTemplateService {
     return this.repository.create(normalized)
   }
 
-  async update(
-    id: string,
-    template: ReportTemplate,
-  ): Promise<ReportTemplate> {
+  async update(id: string, template: ReportTemplate): Promise<ReportTemplate> {
     if (id !== template.id) {
       throw new ReportTemplateServiceError(
         'VALIDATION_ERROR',
         'O ID do modelo não pode ser alterado.',
       )
     }
-    validateTemplate(template)
-    const updated = await this.repository.update(id, normalizeTemplate(template))
+    const normalized = normalizeTemplate(template)
+    validateTemplate(normalized)
+    const updated = await this.repository.update(id, normalized)
     if (!updated) {
       throw new ReportTemplateServiceError(
         'NOT_FOUND',

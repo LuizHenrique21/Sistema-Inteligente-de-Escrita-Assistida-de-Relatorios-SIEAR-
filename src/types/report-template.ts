@@ -23,10 +23,7 @@ export interface ReportTemplate {
 }
 
 export type TemplateErrorCode =
-  | 'VALIDATION_ERROR'
-  | 'NOT_FOUND'
-  | 'DUPLICATE_ID'
-  | 'UNEXPECTED_ERROR'
+  'VALIDATION_ERROR' | 'NOT_FOUND' | 'DUPLICATE_ID' | 'UNEXPECTED_ERROR'
 
 export type TemplateResult<T> =
   | { success: true; data: T }

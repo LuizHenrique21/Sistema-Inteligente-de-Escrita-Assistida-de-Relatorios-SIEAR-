@@ -5,9 +5,7 @@ function cloneTemplate(template: ReportTemplate): ReportTemplate {
   return structuredClone(template)
 }
 
-export class InMemoryReportTemplateRepository
-  implements ReportTemplateRepository
-{
+export class InMemoryReportTemplateRepository implements ReportTemplateRepository {
   private readonly templates = new Map<string, ReportTemplate>()
 
   constructor(initialTemplates: ReportTemplate[] = []) {
