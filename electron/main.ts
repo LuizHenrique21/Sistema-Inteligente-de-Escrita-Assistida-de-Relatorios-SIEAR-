@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { registerAiIpc } from './ipc/ai.ipc'
 import { registerAppIpc } from './ipc/app.ipc'
 
 const electronDirectory = path.dirname(fileURLToPath(import.meta.url))
@@ -31,6 +32,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerAppIpc()
+  registerAiIpc()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -13,14 +13,13 @@ body {
   min-width: 320px;
   min-height: 100vh;
 }
-button {
+button,
+textarea {
   font: inherit;
 }
 .shell {
   min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 32px;
+  padding: 36px;
   background:
     radial-gradient(
       circle at 15% 20%,
@@ -30,13 +29,20 @@ button {
     radial-gradient(circle at 85% 80%, rgba(41, 96, 72, 0.12), transparent 30%),
     #edf3ef;
 }
+.layout {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(300px, 0.85fr) minmax(400px, 1.15fr);
+  gap: 24px;
+  align-items: start;
+}
 .card {
-  width: min(620px, 100%);
-  padding: clamp(32px, 7vw, 64px);
+  padding: clamp(28px, 5vw, 52px);
   border: 1px solid rgba(34, 79, 60, 0.12);
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 24px 70px rgba(31, 66, 51, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 24px 70px rgba(31, 66, 51, 0.1);
 }
 .eyebrow {
   color: #31704f;
@@ -47,20 +53,27 @@ button {
 }
 h1 {
   margin: 12px 0 4px;
-  font-size: clamp(3rem, 10vw, 5rem);
+  font-size: clamp(3rem, 8vw, 4.5rem);
   letter-spacing: -0.06em;
 }
-.subtitle {
-  max-width: 430px;
+h2 {
+  margin: 12px 0 6px;
+  font-size: 2rem;
+  letter-spacing: -0.035em;
+}
+.subtitle,
+.section-description {
   margin: 0;
   color: #52635b;
-  font-size: 1.05rem;
   line-height: 1.6;
+}
+.section-description {
+  margin-bottom: 28px;
 }
 .details {
   display: grid;
   gap: 2px;
-  margin: 36px 0;
+  margin: 32px 0;
 }
 .details div {
   display: flex;
@@ -88,6 +101,29 @@ dd {
   background: #38a169;
   box-shadow: 0 0 0 4px rgba(56, 161, 105, 0.12);
 }
+label {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+textarea {
+  display: block;
+  width: 100%;
+  min-height: 130px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  resize: vertical;
+  border: 1px solid #cbd9d0;
+  border-radius: 12px;
+  color: #17231e;
+  background: #fbfdfc;
+  line-height: 1.55;
+}
+textarea:focus {
+  border-color: #31704f;
+  outline: 3px solid rgba(49, 112, 79, 0.12);
+}
 button {
   width: 100%;
   padding: 14px 20px;
@@ -107,13 +143,46 @@ button:focus-visible {
   outline: 3px solid rgba(36, 92, 67, 0.3);
   outline-offset: 3px;
 }
-button:disabled {
+button:disabled,
+textarea:disabled {
   cursor: wait;
-  opacity: 0.7;
+  opacity: 0.65;
+}
+.message {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 12px;
+}
+.message strong {
+  display: block;
+  margin-bottom: 6px;
+}
+.message p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+.error-message {
+  color: #842828;
+  border: 1px solid #efc5c5;
+  background: #fff2f2;
+}
+.response-message {
+  color: #173f2d;
+  border: 1px solid #bfddcc;
+  background: #eff9f3;
+}
+@media (max-width: 850px) {
+  .shell {
+    padding: 20px;
+  }
+  .layout {
+    grid-template-columns: 1fr;
+  }
 }
 @media (max-width: 520px) {
   .shell {
-    padding: 16px;
+    padding: 12px;
   }
   .details div {
     align-items: flex-start;
