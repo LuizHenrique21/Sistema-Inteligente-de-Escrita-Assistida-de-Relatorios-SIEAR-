@@ -5,6 +5,8 @@ const siearApi: SiearApi = {
   app: { getInfo: () => ipcRenderer.invoke('app:get-info') },
   ai: {
     generate: (request) => ipcRenderer.invoke('ai:generate', request),
+    extractReportInformation: (request) =>
+      ipcRenderer.invoke('ai:extract-report-information', request),
   },
 }
 

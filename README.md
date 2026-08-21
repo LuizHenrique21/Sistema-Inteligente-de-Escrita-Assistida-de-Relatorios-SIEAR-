@@ -26,6 +26,7 @@ npm run dev
 - `electron/preload.ts`: ponte segura `window.siear`.
 - `electron/ipc/`: handlers IPC por domínio.
 - `electron/services/ollama/`: comunicação exclusiva do Main Process com o Ollama.
+- `electron/services/ai/`: prompts, interpretação e validação de dados estruturados do SIEAR.
 - `src/types/siear-api.ts`: contrato compartilhado e tipado.
 
 ## Ollama
@@ -42,3 +43,18 @@ Fluxo da integração:
 `React → window.siear.ai.generate() → preload → ai:generate → OllamaService → http://localhost:11434/api/chat`
 
 O Renderer não acessa o endpoint diretamente. URL, modelo e timeout ficam centralizados no serviço do Main Process. Outros serviços futuros devem seguir o mesmo limite arquitetural e ser expostos somente por métodos tipados no preload.
+
+## Extração estruturada
+
+A descrição livre é convertida no contrato `ReportInformation` pelo fluxo:
+
+`React → window.siear.ai.extractReportInformation() → IPC → ReportExtractionService → OllamaService → Ollama`
+
+O serviço de extração exige todos os campos do contrato, valida o JSON e rejeita respostas parciais ou com tipos incorretos. Informações ausentes permanecem `null`; atividades permanecem sempre em um array.
+
+O teste de integração com o Ollama real é opt-in. No PowerShell:
+
+```powershell
+$env:SIEAR_OLLAMA_INTEGRATION='true'
+npm exec vitest run electron/services/ai/report-extraction.integration.test.ts
+```

@@ -1,16 +1,21 @@
 import { useState } from 'react'
-import type { AppInfo } from './types/siear-api'
+import type { AppInfo, ReportInformation } from './types/siear-api'
 
-const EXAMPLE_PROMPT = 'Explique em uma frase o que é manutenção preventiva.'
+const EXAMPLE_DESCRIPTION =
+  'Troquei o HD do notebook Dell, instalei Windows 11 e atualizei os drivers. Depois fiz testes e o computador funcionou normalmente.'
+
+function displayValue(value: string | null): string {
+  return value ?? 'Não informado'
+}
 
 function App() {
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [status, setStatus] = useState('Pronto para testar')
   const [isCheckingApp, setIsCheckingApp] = useState(false)
-  const [prompt, setPrompt] = useState(EXAMPLE_PROMPT)
-  const [response, setResponse] = useState('')
-  const [aiError, setAiError] = useState('')
-  const [isGenerating, setIsGenerating] = useState(false)
+  const [description, setDescription] = useState(EXAMPLE_DESCRIPTION)
+  const [report, setReport] = useState<ReportInformation | null>(null)
+  const [extractionError, setExtractionError] = useState('')
+  const [isExtracting, setIsExtracting] = useState(false)
 
   async function testConnection(): Promise<void> {
     setIsCheckingApp(true)
@@ -25,29 +30,32 @@ function App() {
     }
   }
 
-  async function generateWithAi(): Promise<void> {
-    if (isGenerating) return
+  async function extractInformation(): Promise<void> {
+    if (isExtracting) return
 
-    const normalizedPrompt = prompt.trim()
-    if (!normalizedPrompt) {
-      setAiError('Digite um prompt antes de enviar para a IA.')
+    const normalizedDescription = description.trim()
+    if (!normalizedDescription) {
+      setExtractionError(
+        'Digite uma descrição antes de extrair as informações.',
+      )
       return
     }
 
-    setIsGenerating(true)
-    setAiError('')
-    setResponse('')
+    setIsExtracting(true)
+    setExtractionError('')
+    setReport(null)
 
     try {
-      const result = await window.siear.ai.generate({
-        prompt: normalizedPrompt,
+      const result = await window.siear.ai.extractReportInformation({
+        text: normalizedDescription,
       })
-      if (result.ok) setResponse(result.content)
-      else setAiError(result.error.message)
+
+      if (result.success) setReport(result.data)
+      else setExtractionError(result.error.message)
     } catch {
-      setAiError('Não foi possível comunicar com o processo principal.')
+      setExtractionError('Não foi possível comunicar com o processo principal.')
     } finally {
-      setIsGenerating(false)
+      setIsExtracting(false)
     }
   }
 
@@ -88,38 +96,80 @@ function App() {
           </button>
         </section>
 
-        <section className="card ai-card">
-          <span className="eyebrow">Integração local</span>
-          <h2>Teste do Ollama</h2>
+        <section className="card extraction-card">
+          <span className="eyebrow">Dados estruturados</span>
+          <h2>Extração de informações</h2>
           <p className="section-description">
-            O prompt é processado localmente pelo modelo configurado no SIEAR.
+            Descreva a atividade livremente. O SIEAR extrairá somente as
+            informações fornecidas.
           </p>
-          <label htmlFor="ai-prompt">Prompt</label>
+          <label htmlFor="report-description">Descrição</label>
           <textarea
-            id="ai-prompt"
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder="Escreva uma frase sobre manutenção..."
-            rows={5}
-            disabled={isGenerating}
+            id="report-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Descreva a atividade realizada..."
+            rows={7}
+            disabled={isExtracting}
           />
           <button
             type="button"
-            onClick={generateWithAi}
-            disabled={isGenerating || prompt.trim() === ''}
+            onClick={extractInformation}
+            disabled={isExtracting || description.trim() === ''}
           >
-            {isGenerating ? 'Processando...' : 'Enviar para IA'}
+            {isExtracting ? 'Extraindo...' : 'Extrair informações'}
           </button>
-          {aiError && (
+
+          {extractionError && (
             <div className="message error-message" role="alert">
-              <strong>Não foi possível gerar a resposta</strong>
-              <p>{aiError}</p>
+              <strong>Não foi possível extrair as informações</strong>
+              <p>{extractionError}</p>
             </div>
           )}
-          {response && (
-            <div className="message response-message" aria-live="polite">
-              <strong>Resposta</strong>
-              <p>{response}</p>
+
+          {report && (
+            <div className="report-result" aria-live="polite">
+              <h3>Informações extraídas</h3>
+              <dl className="report-grid">
+                <div>
+                  <dt>Equipamento</dt>
+                  <dd>{displayValue(report.equipment)}</dd>
+                </div>
+                <div className="activities-field">
+                  <dt>Atividades</dt>
+                  <dd>
+                    {report.activities.length > 0 ? (
+                      <ul>
+                        {report.activities.map((activity) => (
+                          <li key={activity}>{activity}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      'Não informado'
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Resultado</dt>
+                  <dd>{displayValue(report.result)}</dd>
+                </div>
+                <div>
+                  <dt>Problemas</dt>
+                  <dd>{displayValue(report.problems)}</dd>
+                </div>
+                <div>
+                  <dt>Tempo</dt>
+                  <dd>{displayValue(report.duration)}</dd>
+                </div>
+                <div>
+                  <dt>Observações</dt>
+                  <dd>{displayValue(report.observations)}</dd>
+                </div>
+              </dl>
+              <details>
+                <summary>Ver JSON</summary>
+                <pre>{JSON.stringify(report, null, 2)}</pre>
+              </details>
             </div>
           )}
         </section>

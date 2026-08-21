@@ -34,6 +34,20 @@ describe('OllamaService', () => {
     })
   })
 
+  it('solicita formato JSON ao gerar conteúdo estruturado', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ message: { content: '{}' } }), {
+        status: 200,
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await service.generateJson('Prompt estruturado')
+
+    const options = fetchMock.mock.calls[0]?.[1] as RequestInit
+    expect(JSON.parse(String(options.body))).toMatchObject({ format: 'json' })
+  })
+
   it('converte timeout em erro compreensível', async () => {
     const timeout = new Error('timeout')
     timeout.name = 'TimeoutError'
