@@ -7,7 +7,12 @@ import type {
   ReportFieldType,
   ReportSection,
   ReportTemplate,
+  ReportHierarchyNode,
 } from '../types/report-template'
+import type {
+  ImportTemplateResult,
+  TemplateImportProgress,
+} from '../types/template-import'
 
 interface ReportTemplatesPageProps {
   templates: ReportTemplate[]
@@ -23,6 +28,12 @@ function emptySection(order: number): ReportSection {
     description: '',
     required: true,
     order,
+    parentSectionId: null,
+    level: 1,
+    repeatable: false,
+    semanticPurpose: '',
+    writingStyle: '',
+    formattingStyle: '',
   }
 }
 
@@ -40,7 +51,38 @@ function emptyTemplate(): ReportTemplate {
     writingRules: [],
     recommendedVocabulary: [],
     forbiddenExpressions: [],
+    documentType: '',
+    status: 'confirmed',
+    hierarchy: [],
+    activityPatterns: [],
+    semanticRules: [],
+    formattingRules: [],
+    requiredElements: [],
+    optionalElements: [],
+    repeatableElements: [],
   }
+}
+
+function hierarchyFromSections(
+  sections: ReportSection[],
+): ReportHierarchyNode[] {
+  const nodes = new Map(
+    sections.map((section) => [
+      section.id,
+      { sectionId: section.id, children: [] as ReportHierarchyNode[] },
+    ]),
+  )
+  const roots: ReportHierarchyNode[] = []
+  for (const section of sections) {
+    const node = nodes.get(section.id)
+    if (!node) continue
+    const parent = section.parentSectionId
+      ? nodes.get(section.parentSectionId)
+      : undefined
+    if (parent && parent !== node) parent.children.push(node)
+    else roots.push(node)
+  }
+  return roots
 }
 
 function emptyField(): ReportField {
@@ -66,6 +108,8 @@ export function ReportTemplatesPage({
   const [isSaving, setIsSaving] = useState(false)
   const [showCreationOptions, setShowCreationOptions] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] =
+    useState<TemplateImportProgress | null>(null)
   const [importedFileName, setImportedFileName] = useState<string | null>(null)
   const selected = templates.find((template) => template.id === selectedId)
 
@@ -80,16 +124,32 @@ export function ReportTemplatesPage({
   async function importTemplate(): Promise<void> {
     if (isImporting) return
     setIsImporting(true)
+    setImportProgress({ step: 1, message: 'Lendo documento...' })
     setError('')
-    const result = await documentsService.selectAndAnalyzeTemplate()
-    setIsImporting(false)
+    const stopProgress =
+      documentsService.onTemplateImportProgress(setImportProgress)
+    let result: ImportTemplateResult
+    try {
+      result = await documentsService.selectAndAnalyzeTemplate()
+    } catch {
+      setError('Não foi possível iniciar a importação do documento.')
+      setImportProgress(null)
+      return
+    } finally {
+      stopProgress()
+      setIsImporting(false)
+    }
     if (result.success) {
       setDraft(result.data)
       setEditingId(null)
       setImportedFileName(result.fileName)
       setShowCreationOptions(false)
+      setImportProgress({ step: 7, message: 'Modelo pronto para revisão.' })
     } else if (!result.canceled) {
       setError(result.error.message)
+      setImportProgress(null)
+    } else {
+      setImportProgress(null)
     }
   }
 
@@ -115,9 +175,32 @@ export function ReportTemplatesPage({
     if (!draft || isSaving) return
     setIsSaving(true)
     setError('')
+    const sectionIds = new Set(draft.sections.map((section) => section.id))
+    const reviewedSections = draft.sections.map((section) => ({
+      ...section,
+      parentSectionId:
+        section.parentSectionId && sectionIds.has(section.parentSectionId)
+          ? section.parentSectionId
+          : null,
+    }))
+    const reviewedDraft: ReportTemplate = {
+      ...draft,
+      sections: reviewedSections,
+      status: 'confirmed',
+      hierarchy: hierarchyFromSections(reviewedSections),
+      requiredElements: reviewedSections
+        .filter((section) => section.required)
+        .map((section) => section.name),
+      optionalElements: reviewedSections
+        .filter((section) => !section.required)
+        .map((section) => section.name),
+      repeatableElements: reviewedSections
+        .filter((section) => section.repeatable)
+        .map((section) => section.name),
+    }
     const result = editingId
-      ? await templatesService.update(editingId, draft)
-      : await templatesService.create(draft)
+      ? await templatesService.update(editingId, reviewedDraft)
+      : await templatesService.create(reviewedDraft)
 
     if (result.success) {
       setDraft(null)
@@ -198,12 +281,23 @@ export function ReportTemplatesPage({
                     ? 'Analisando documento...'
                     : 'Importar relatório existente'}
                 </strong>
-                <span>Recomendado · DOCX ou TXT</span>
+                <span>Recomendado · um único DOCX</span>
                 <p>
                   O SIEAR identifica estrutura, campos e regras para você
                   revisar.
                 </p>
               </button>
+              {isImporting && importProgress && (
+                <div
+                  className="import-progress"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <progress value={importProgress.step} max={7} />
+                  <strong>Etapa {importProgress.step} de 7</strong>
+                  <span>{importProgress.message}</span>
+                </div>
+              )}
               <button
                 className="creation-option"
                 type="button"
@@ -243,6 +337,15 @@ export function ReportTemplatesPage({
                 </p>
               )}
               <div className="form-grid">
+                <label>
+                  Tipo de documento
+                  <input
+                    value={draft.documentType ?? ''}
+                    onChange={(event) =>
+                      setDraft({ ...draft, documentType: event.target.value })
+                    }
+                  />
+                </label>
                 <label>
                   Nome
                   <input
@@ -361,6 +464,39 @@ export function ReportTemplatesPage({
                         }
                       />
                     </label>
+                    <label>
+                      Nível
+                      <input
+                        type="number"
+                        min="1"
+                        value={section.level ?? 1}
+                        onChange={(event) =>
+                          updateSection(index, {
+                            level: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Seção pai
+                      <select
+                        value={section.parentSectionId ?? ''}
+                        onChange={(event) =>
+                          updateSection(index, {
+                            parentSectionId: event.target.value || null,
+                          })
+                        }
+                      >
+                        <option value="">Nenhuma</option>
+                        {draft.sections
+                          .filter((candidate) => candidate.id !== section.id)
+                          .map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>
+                              {candidate.name || 'Seção sem nome'}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
                     <label className="checkbox-field">
                       <input
                         type="checkbox"
@@ -372,6 +508,18 @@ export function ReportTemplatesPage({
                         }
                       />
                       Obrigatória
+                    </label>
+                    <label className="checkbox-field">
+                      <input
+                        type="checkbox"
+                        checked={section.repeatable ?? false}
+                        onChange={(event) =>
+                          updateSection(index, {
+                            repeatable: event.target.checked,
+                          })
+                        }
+                      />
+                      Repetível
                     </label>
                     <button
                       className="danger-text-button"
@@ -387,6 +535,39 @@ export function ReportTemplatesPage({
                     >
                       Remover
                     </button>
+                    <label className="full-field">
+                      Função semântica
+                      <input
+                        value={section.semanticPurpose ?? ''}
+                        onChange={(event) =>
+                          updateSection(index, {
+                            semanticPurpose: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="full-field">
+                      Estilo de escrita
+                      <input
+                        value={section.writingStyle ?? ''}
+                        onChange={(event) =>
+                          updateSection(index, {
+                            writingStyle: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="full-field">
+                      Formatação
+                      <input
+                        value={section.formattingStyle ?? ''}
+                        onChange={(event) =>
+                          updateSection(index, {
+                            formattingStyle: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
                   </div>
                 ))}
               </div>
@@ -546,6 +727,38 @@ export function ReportTemplatesPage({
                       setDraft({
                         ...draft,
                         recommendedVocabulary: event.target.value
+                          .split('\n')
+                          .map((item) => item.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                  />
+                </label>
+                <label className="full-field">
+                  Regras semânticas <span>uma por linha</span>
+                  <textarea
+                    rows={4}
+                    value={(draft.semanticRules ?? []).join('\n')}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        semanticRules: event.target.value
+                          .split('\n')
+                          .map((item) => item.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                  />
+                </label>
+                <label className="full-field">
+                  Regras de formatação <span>uma por linha</span>
+                  <textarea
+                    rows={6}
+                    value={(draft.formattingRules ?? []).join('\n')}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        formattingRules: event.target.value
                           .split('\n')
                           .map((item) => item.trim())
                           .filter(Boolean),

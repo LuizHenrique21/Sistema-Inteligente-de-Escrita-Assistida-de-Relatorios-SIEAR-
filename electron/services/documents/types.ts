@@ -89,6 +89,7 @@ export interface DocumentHeaderFooter {
   variant: 'default' | 'first' | 'even' | 'unknown'
   text: string
   paragraphs: string[]
+  formatting?: ParagraphFormatting[]
 }
 export interface PageInformation {
   widthPt: number | null

@@ -1,18 +1,17 @@
 import type {
   GenerateReportRequest,
   GenerateReportResult,
-  GeneratedReport,
 } from '../../src/types/generated-report'
 import type { ReportTemplate } from '../../src/types/report-template'
 import { ReportGenerationServiceError } from '../services/ai/report-generation.service'
-import { isReportInformation } from '../services/ai/report-extraction.service'
+import { UserInformationExtractionError } from '../services/ai/user-information-extractor'
 import { OllamaServiceError } from '../services/ollama/ollama.service'
 
 export interface ReportGenerator {
   generate(
-    information: GenerateReportRequest['information'],
+    text: string,
     template: ReportTemplate,
-  ): Promise<GeneratedReport>
+  ): Promise<GenerateReportResult>
 }
 
 export interface TemplateFinder {
@@ -26,8 +25,9 @@ function isValidRequest(value: unknown): value is GenerateReportRequest {
     'templateId' in value &&
     typeof value.templateId === 'string' &&
     value.templateId.trim() !== '' &&
-    'information' in value &&
-    isReportInformation(value.information)
+    'text' in value &&
+    typeof value.text === 'string' &&
+    value.text.trim() !== ''
   )
 }
 
@@ -57,11 +57,11 @@ export function createReportGenerationHandler(
           },
         }
       }
-      const data = await generator.generate(request.information, template)
-      return { success: true, data }
+      return generator.generate(request.text.trim(), template)
     } catch (error: unknown) {
       if (
         error instanceof ReportGenerationServiceError ||
+        error instanceof UserInformationExtractionError ||
         error instanceof OllamaServiceError
       ) {
         return {

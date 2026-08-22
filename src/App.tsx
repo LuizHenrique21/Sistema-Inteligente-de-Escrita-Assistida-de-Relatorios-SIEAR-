@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { ReportTemplatesPage } from './pages/ReportTemplatesPage'
 import { aiService } from './services/ai.service'
 import { templatesService } from './services/templates.service'
-import type { GeneratedReport } from './types/generated-report'
+import type {
+  GeneratedReport,
+  MissingRequiredInformation,
+} from './types/generated-report'
 import type { ReportTemplate } from './types/report-template'
 import type { AppInfo, ReportInformation } from './types/siear-api'
 
@@ -24,6 +27,9 @@ function App() {
   const [generatedReport, setGeneratedReport] =
     useState<GeneratedReport | null>(null)
   const [generationError, setGenerationError] = useState('')
+  const [missingInformation, setMissingInformation] = useState<
+    MissingRequiredInformation[]
+  >([])
   const [isGenerating, setIsGenerating] = useState(false)
   const [activePage, setActivePage] = useState<'extract' | 'templates'>(
     'extract',
@@ -102,17 +108,20 @@ function App() {
   }
 
   async function generateReport(): Promise<void> {
-    if (!report || !selectedTemplateId || isGenerating) return
+    if (!description.trim() || !selectedTemplateId || isGenerating) return
     setIsGenerating(true)
     setGenerationError('')
     setGeneratedReport(null)
+    setMissingInformation([])
 
     try {
       const result = await aiService.generateReport({
-        information: report,
+        text: description.trim(),
         templateId: selectedTemplateId,
       })
-      if (result.success) setGeneratedReport(result.data)
+      if (result.success && 'requiresInput' in result) {
+        setMissingInformation(result.missing)
+      } else if (result.success) setGeneratedReport(result.data)
       else setGenerationError(result.error.message)
     } catch {
       setGenerationError('Não foi possível comunicar com o processo principal.')
@@ -192,6 +201,7 @@ function App() {
                 setSelectedTemplateId(event.target.value)
                 setGeneratedReport(null)
                 setGenerationError('')
+                setMissingInformation([])
               }}
             >
               {templates.map((template) => (
@@ -220,6 +230,7 @@ function App() {
                 setGeneratedReport(null)
                 setExtractionError('')
                 setGenerationError('')
+                setMissingInformation([])
               }}
               placeholder="Descreva a atividade realizada..."
               rows={7}
@@ -231,6 +242,18 @@ function App() {
               disabled={isExtracting || description.trim() === ''}
             >
               {isExtracting ? 'Analisando...' : 'Analisar informações'}
+            </button>
+            <button
+              className="generate-report-button"
+              type="button"
+              onClick={generateReport}
+              disabled={
+                isGenerating || !selectedTemplateId || description.trim() === ''
+              }
+            >
+              {isGenerating
+                ? 'Planejando e gerando...'
+                : 'Gerar relatório com o modelo'}
             </button>
 
             {extractionError && (
@@ -283,14 +306,20 @@ function App() {
                   <summary>Ver JSON</summary>
                   <pre>{JSON.stringify(report, null, 2)}</pre>
                 </details>
-                <button
-                  className="generate-report-button"
-                  type="button"
-                  onClick={generateReport}
-                  disabled={isGenerating || !selectedTemplateId}
-                >
-                  {isGenerating ? 'Gerando relatório...' : 'Gerar relatório'}
-                </button>
+              </div>
+            )}
+
+            {missingInformation.length > 0 && (
+              <div className="message missing-information" role="status">
+                <strong>Informações essenciais ausentes</strong>
+                <p>
+                  Responda às perguntas abaixo na descrição e tente novamente:
+                </p>
+                <ul>
+                  {missingInformation.map((item) => (
+                    <li key={item.fieldId}>{item.question}</li>
+                  ))}
+                </ul>
               </div>
             )}
 

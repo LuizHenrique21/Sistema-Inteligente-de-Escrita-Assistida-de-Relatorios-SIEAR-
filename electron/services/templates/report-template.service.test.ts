@@ -79,6 +79,15 @@ describe('ReportTemplateService', () => {
     )
   })
 
+  it('não salva um modelo aprendido antes da confirmação da revisão', async () => {
+    await expect(
+      service.create(template({ status: 'draft' })),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: expect.stringContaining('confirmado'),
+    })
+  })
+
   it('rejeita modelo sem seções', async () => {
     await expect(
       service.create(template({ sections: [] })),

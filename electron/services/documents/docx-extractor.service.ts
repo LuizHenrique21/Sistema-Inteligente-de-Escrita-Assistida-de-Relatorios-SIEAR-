@@ -89,13 +89,24 @@ function parseStyles(xml: string): DocumentStyle[] {
     const value = match[0]
     const id =
       value.match(/<w:style\b[^>]*w:styleId="([^"]+)"/i)?.[1] ?? randomUUID()
+    const extracted = formatting(value, id)
+    const styleFormatting: Partial<ParagraphFormatting> = {}
+    for (const [key, property] of Object.entries(extracted)) {
+      if (property !== null) {
+        ;(styleFormatting as Record<string, unknown>)[key] = property
+      }
+    }
+    const run = value.match(/<w:rPr\b[\s\S]*?<\/w:rPr>/i)?.[0] ?? ''
+    if (!/<w:b(?:\s|\/|>)/i.test(run)) delete styleFormatting.bold
+    if (!/<w:i(?:\s|\/|>)/i.test(run)) delete styleFormatting.italic
+    if (!/<w:u(?:\s|\/|>)/i.test(run)) delete styleFormatting.underline
     return {
       id,
       name: attr(value, 'w:name') ?? id,
       type: value.match(/<w:style\b[^>]*w:type="([^"]+)"/i)?.[1] ?? 'unknown',
       basedOn: attr(value, 'w:basedOn'),
       isDefault: /<w:style\b[^>]*w:default="(?:1|true)"/i.test(value),
-      formatting: formatting(value, id),
+      formatting: styleFormatting,
     }
   })
 }
@@ -178,8 +189,10 @@ function headerFooter(
   xml: string,
   type: 'header' | 'footer',
   variant: DocumentHeaderFooter['variant'],
+  styles: DocumentStyle[],
 ): DocumentHeaderFooter {
-  const paragraphs = [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/gi)]
+  const paragraphXml = [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/gi)]
+  const paragraphs = paragraphXml
     .map((match) => xmlText(match[0]))
     .filter(Boolean)
   return {
@@ -188,6 +201,22 @@ function headerFooter(
     variant,
     text: paragraphs.join('\n'),
     paragraphs,
+    formatting: paragraphXml
+      .filter((match) => xmlText(match[0]) !== '')
+      .map((match) => {
+        const styleId = attr(match[0], 'w:pStyle')
+        const source = styles.find((style) => style.id === styleId)
+        const result: ParagraphFormatting = {
+          ...EMPTY,
+          ...source?.formatting,
+        }
+        const direct = formatting(match[0], styleId)
+        for (const [key, value] of Object.entries(direct)) {
+          if (value !== null)
+            (result as unknown as Record<string, unknown>)[key] = value
+        }
+        return result
+      }),
   }
 }
 
@@ -401,6 +430,7 @@ export class DocxExtractor implements DocumentExtractor {
           await readXml(name),
           type,
           (reference?.[1] as DocumentHeaderFooter['variant']) ?? 'unknown',
+          styles,
         )
         ;(type === 'header' ? headers : footers).push(parsed)
       }
