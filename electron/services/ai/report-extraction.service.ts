@@ -11,7 +11,10 @@ const REPORT_FIELDS = [
 ] as const
 
 export interface StructuredTextGenerator {
-  generateJson(prompt: string): Promise<string>
+  generateJson(
+    prompt: string,
+    schema?: Record<string, unknown>,
+  ): Promise<string>
 }
 
 export class ReportExtractionServiceError extends Error {
@@ -27,7 +30,9 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === 'string'
 }
 
-function isReportInformation(value: unknown): value is ReportInformation {
+export function isReportInformation(
+  value: unknown,
+): value is ReportInformation {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false
   }
