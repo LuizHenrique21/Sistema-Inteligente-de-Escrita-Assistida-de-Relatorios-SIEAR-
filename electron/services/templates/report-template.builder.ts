@@ -13,6 +13,11 @@ import type {
 } from '../documents/structure-analysis.types'
 import type { DocumentRepresentation } from '../documents/types'
 import type { WritingPattern } from '../documents/writing-analysis.types'
+import {
+  REPORT_TEMPLATE_V2_VERSION,
+  type ReportTemplateV2,
+  type ReportTemplateV2Requirements,
+} from './report-template-v2.types'
 
 export interface ReportTemplateBuilderInput {
   document: DocumentRepresentation
@@ -182,6 +187,24 @@ function formattingRules(pattern: FormattingPattern): string[] {
   ])
 }
 
+function buildV2Requirements(
+  structure: StructurePattern,
+): ReportTemplateV2Requirements {
+  return {
+    requiredElements: [...structure.requiredElements],
+    optionalElements: [...structure.optionalElements],
+    repeatableElements: unique([
+      ...structure.sections
+        .filter((section) => section.repeatable)
+        .map((section) => section.name),
+      ...structure.activityPatterns
+        .filter((activity) => activity.repeatable)
+        .map((activity) => activity.namePattern),
+      ...structure.recurringElements.map((element) => element.name),
+    ]),
+  }
+}
+
 export class ReportTemplateBuilder {
   build(input: ReportTemplateBuilderInput): ReportTemplate {
     const { structure, writing, semantic, formatting } = input
@@ -271,6 +294,30 @@ export class ReportTemplateBuilder {
       requiredElements: unique(structure.requiredElements),
       optionalElements: unique(structure.optionalElements),
       repeatableElements,
+    }
+  }
+
+  buildV2(input: ReportTemplateBuilderInput): ReportTemplateV2 {
+    const timestamp = new Date().toISOString()
+
+    return {
+      version: REPORT_TEMPLATE_V2_VERSION,
+      metadata: {
+        id: randomUUID(),
+        name: `Modelo de ${input.structure.documentType}`,
+        description: `Padrão reutilizável aprendido a partir de um único documento do tipo ${input.structure.documentType}.`,
+        documentType: input.structure.documentType,
+        status: 'draft',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      structurePattern: structuredClone(input.structure),
+      writingPattern: structuredClone(input.writing),
+      semanticPattern: structuredClone(input.semantic),
+      formattingPattern: structuredClone(input.formatting),
+      fields: structuredClone(input.structure.fields),
+      activityPatterns: structuredClone(input.structure.activityPatterns),
+      requirements: buildV2Requirements(input.structure),
     }
   }
 }

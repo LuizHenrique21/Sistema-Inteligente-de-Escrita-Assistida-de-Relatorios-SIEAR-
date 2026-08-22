@@ -34,6 +34,23 @@ const siearApi: SiearApi = {
       ipcRenderer.invoke('templates:update', id, template),
     delete: (id) => ipcRenderer.invoke('templates:delete', id),
   },
+  templatesV2: {
+    createFromDocument: (request) =>
+      ipcRenderer.invoke('templates-v2:create-from-document', request),
+    onCreationProgress: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+        if (isTemplateImportProgress(value)) callback(value)
+      }
+      ipcRenderer.on('templates-v2:creation-progress', listener)
+      return () =>
+        ipcRenderer.removeListener('templates-v2:creation-progress', listener)
+    },
+    getAll: () => ipcRenderer.invoke('templates-v2:get-all'),
+    getById: (id) => ipcRenderer.invoke('templates-v2:get-by-id', id),
+    update: (template) => ipcRenderer.invoke('templates-v2:update', template),
+    confirm: (id) => ipcRenderer.invoke('templates-v2:confirm', id),
+    delete: (id) => ipcRenderer.invoke('templates-v2:delete', id),
+  },
   documents: {
     selectAndAnalyzeTemplate: () =>
       ipcRenderer.invoke('documents:select-and-analyze-template'),

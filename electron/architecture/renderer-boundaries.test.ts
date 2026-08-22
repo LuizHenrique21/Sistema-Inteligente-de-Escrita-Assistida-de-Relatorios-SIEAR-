@@ -18,6 +18,9 @@ describe('limites do Renderer', () => {
       expect(source, file).not.toMatch(/from ['"]node:/)
       expect(source, file).not.toContain('ipcRenderer')
       expect(source, file).not.toMatch(/\brequire\s*\(/)
+      expect(source, file).not.toMatch(/electron[\\/]repositories/)
+      expect(source, file).not.toMatch(/ollama\.service/)
+      expect(source, file).not.toMatch(/(?:node:)?fs(?:\/promises)?['"]/)
     }
   })
 })

@@ -3,8 +3,16 @@ import type { ReportTemplate } from '../../../src/types/report-template'
 import type { FormattingPattern } from '../documents/formatting-analysis.types'
 import type { SemanticPattern } from '../documents/semantic-analysis.types'
 import type { StructurePattern } from '../documents/structure-analysis.types'
-import type { DocumentRepresentation } from '../documents/types'
+import type {
+  DocumentRepresentation,
+  ParagraphFormatting,
+} from '../documents/types'
 import type { WritingPattern } from '../documents/writing-analysis.types'
+import { ReportTemplateBuilder } from './report-template.builder'
+import {
+  REPORT_TEMPLATE_V2_VERSION,
+  type ReportTemplateV2,
+} from './report-template-v2.types'
 import { TemplateCreationPipeline } from './template-creation.pipeline'
 
 const document = { fileName: 'modelo.docx' } as DocumentRepresentation
@@ -36,6 +44,33 @@ function template(id: string): ReportTemplate {
     recommendedVocabulary: [],
     forbiddenExpressions: [],
     status: 'draft',
+  }
+}
+
+function templateV2(id: string): ReportTemplateV2 {
+  const timestamp = '2026-08-21T00:00:00.000Z'
+  return {
+    version: REPORT_TEMPLATE_V2_VERSION,
+    metadata: {
+      id,
+      name: 'Modelo V2',
+      description: 'Modelo aprendido.',
+      documentType: 'Relatório',
+      status: 'draft',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+    structurePattern: structure,
+    writingPattern: writing,
+    semanticPattern: semantic,
+    formattingPattern: formatting,
+    fields: [],
+    activityPatterns: [],
+    requirements: {
+      requiredElements: [],
+      optionalElements: [],
+      repeatableElements: [],
+    },
   }
 }
 
@@ -77,6 +112,7 @@ describe('TemplateCreationPipeline', () => {
         calls.push('builder')
         return template('template-1')
       }),
+      buildV2: vi.fn(() => templateV2('template-v2-1')),
     }
     const progress: Array<{ step: number; message: string }> = []
     const result = await new TemplateCreationPipeline(
@@ -131,7 +167,7 @@ describe('TemplateCreationPipeline', () => {
       { analyze: vi.fn() },
       { analyze: vi.fn() },
       { analyze: vi.fn() },
-      { build: vi.fn() },
+      { build: vi.fn(), buildV2: vi.fn() },
     )
     await expect(
       pipeline.execute('invalido.docx', (item) => progress.push(item.step)),
@@ -143,6 +179,7 @@ describe('TemplateCreationPipeline', () => {
     let sequence = 0
     const builder = {
       build: vi.fn(() => template(`template-${++sequence}`)),
+      buildV2: vi.fn(() => templateV2(`template-v2-${sequence}`)),
     }
     const pipeline = new TemplateCreationPipeline(
       { extract: vi.fn().mockResolvedValue(document) },
@@ -156,5 +193,340 @@ describe('TemplateCreationPipeline', () => {
     const second = await pipeline.execute('segundo.docx')
     expect(first.id).not.toBe(second.id)
     expect(builder.build).toHaveBeenCalledTimes(2)
+  })
+
+  it('preserva análises ricas no fluxo V2 sem achatamento', async () => {
+    const fieldEvidence = {
+      source: 'paragraph' as const,
+      elementId: 'paragraph-responsavel',
+      excerpt: 'Responsável: valor variável',
+      reason: 'Rótulo recorrente identificado no documento.',
+    }
+    const richStructure: StructurePattern = {
+      documentType: 'Relatório técnico',
+      mainTitle: 'Relatório de atividades',
+      hierarchy: [
+        {
+          name: 'Atividade',
+          level: 1,
+          order: 1,
+          purpose: 'Agrupar uma atividade.',
+          required: true,
+          repeatable: true,
+          children: [
+            {
+              name: 'Execução',
+              level: 2,
+              order: 2,
+              purpose: 'Registrar o procedimento.',
+              required: true,
+              repeatable: false,
+              children: [],
+            },
+          ],
+        },
+      ],
+      sections: [
+        {
+          name: 'Atividade',
+          level: 1,
+          order: 1,
+          purpose: 'Agrupar uma atividade.',
+          required: true,
+          repeatable: true,
+          children: [],
+        },
+        {
+          name: 'Execução',
+          level: 2,
+          order: 2,
+          purpose: 'Registrar o procedimento.',
+          required: true,
+          repeatable: false,
+          children: [],
+        },
+      ],
+      fields: [
+        {
+          name: 'responsavel',
+          label: 'Responsável',
+          type: 'text',
+          required: true,
+          evidence: [fieldEvidence],
+        },
+      ],
+      activityPatterns: [
+        {
+          namePattern: 'Atividade {n}',
+          sections: ['Execução'],
+          order: 1,
+          repeatable: true,
+          fields: [
+            {
+              name: 'responsavel',
+              label: 'Responsável',
+              type: 'text',
+              required: true,
+              evidence: [fieldEvidence],
+            },
+          ],
+        },
+      ],
+      recurringElements: [
+        {
+          type: 'section',
+          name: 'Atividade',
+          occurrences: 3,
+          evidence: ['atividade-1', 'atividade-2', 'atividade-3'],
+        },
+      ],
+      requiredElements: ['Atividade', 'Execução'],
+      optionalElements: ['Observações'],
+    }
+    const linguisticEvidence = {
+      sectionName: 'Execução',
+      excerpt: 'Foi executada a substituição do componente.',
+      reason: 'Trecho demonstra escrita técnica e voz passiva.',
+    }
+    const styleProfile = {
+      tone: 'técnico',
+      formality: 'alta',
+      technicality: 'alta',
+      objectivity: 'alta',
+      averageParagraphWords: 24,
+      sentenceComplexity: 'média',
+      grammaticalPerson: 'terceira pessoa',
+      verbTense: 'pretérito',
+      voice: 'passiva',
+      firstPersonUsage: 'ausente',
+      thirdPersonUsage: 'predominante',
+      detailLevel: 'detalhado',
+      narrativeStyle: 'procedimental',
+      evidence: [linguisticEvidence],
+    }
+    const writingRule = {
+      rule: 'Descrever ações em ordem cronológica.',
+      justification: 'Sequência recorrente nas atividades.',
+      evidence: [linguisticEvidence],
+    }
+    const richWriting: WritingPattern = {
+      globalStyle: styleProfile,
+      sectionStyles: [
+        {
+          ...styleProfile,
+          sectionName: 'Execução',
+          introductionPatterns: [],
+          developmentPatterns: [writingRule],
+          conclusionPatterns: [],
+        },
+      ],
+      vocabulary: [writingRule],
+      terminology: [],
+      sentencePatterns: [writingRule],
+      paragraphPatterns: [],
+      narrativePatterns: [writingRule],
+      forbiddenPatterns: [],
+      recommendedPatterns: [writingRule],
+    }
+    const semanticEvidence = {
+      sectionName: 'Execução',
+      excerpt: 'Foi executada a substituição do componente.',
+      reason: 'Evidencia a ação e o procedimento realizado.',
+    }
+    const richSemantic: SemanticPattern = {
+      documentType: 'Relatório técnico',
+      sections: [
+        {
+          sectionName: 'Execução',
+          purpose: 'Registrar somente ações realizadas.',
+          expectedInformation: [
+            {
+              name: 'procedimento',
+              description: 'Procedimento efetivamente realizado.',
+              informationType: 'procedure',
+              required: true,
+              evidence: [semanticEvidence],
+            },
+          ],
+          excludedInformation: [
+            {
+              rule: 'Não presumir resultados.',
+              justification: 'Resultados pertencem a outra seção.',
+              evidence: [semanticEvidence],
+            },
+          ],
+          informationOrder: ['ação', 'procedimento'],
+          relationships: [
+            {
+              targetSection: 'Resultado',
+              relationship: 'A execução antecede o resultado.',
+              evidence: [semanticEvidence],
+            },
+          ],
+          narrativePattern: 'ação seguida de procedimento',
+          detailLevel: 'detalhado',
+          evidence: [semanticEvidence],
+        },
+      ],
+      activityPatterns: [
+        {
+          namePattern: 'Atividade {n}',
+          occurrenceCount: 3,
+          sectionSequence: ['Execução', 'Resultado'],
+          semanticFlow: ['ação', 'procedimento', 'resultado'],
+          evidence: [semanticEvidence],
+        },
+      ],
+      fields: [],
+      crossSectionRelations: [],
+      uncertainties: [],
+    }
+    const paragraphFormatting: ParagraphFormatting = {
+      fontFamily: 'Arial',
+      fontSizePt: 11,
+      bold: false,
+      italic: false,
+      underline: false,
+      alignment: 'justify',
+      lineSpacing: 1.15,
+      spaceBeforePt: 0,
+      spaceAfterPt: 6,
+      indentLeftPt: 0,
+      indentRightPt: 0,
+      firstLineIndentPt: 18,
+      styleId: 'Normal',
+    }
+    const richFormatting: FormattingPattern = {
+      documentStyle: {
+        predominantFont: 'Arial',
+        predominantFontSizePt: 11,
+        sectionFonts: [
+          { sectionName: 'Execução', fontFamily: 'Arial', fontSizePt: 11 },
+        ],
+        pageWidthPt: 595.3,
+        pageHeightPt: 841.9,
+        orientation: 'portrait',
+        margins: { topPt: 72, rightPt: 60, bottomPt: 72, leftPt: 60 },
+        hasPageNumbering: true,
+        pageBreakCount: 1,
+        pageBreakBeforeSections: ['Anexos'],
+      },
+      headingStyles: [
+        {
+          level: 2,
+          sectionNames: ['Execução'],
+          sourceStyleId: 'Heading2',
+          formatting: { ...paragraphFormatting, bold: true, fontSizePt: 13 },
+          evidence: { elementIds: ['heading-execucao'], occurrences: 3 },
+        },
+      ],
+      paragraphStyles: [
+        {
+          sectionName: 'Execução',
+          sourceStyleId: 'Normal',
+          formatting: paragraphFormatting,
+          evidence: { elementIds: ['paragraph-execucao'], occurrences: 3 },
+        },
+      ],
+      listStyles: [],
+      tableStyles: [],
+      figureStyles: [],
+      captionStyles: [],
+      headerStyles: [],
+      footerStyles: [],
+      sourceStyleIds: ['Normal', 'Heading2'],
+    }
+    const builder = new ReportTemplateBuilder()
+    const buildV2 = vi.spyOn(builder, 'buildV2')
+    const structureAnalyzer = {
+      analyze: vi.fn().mockResolvedValue(richStructure),
+    }
+    const writingAnalyzer = {
+      analyze: vi.fn().mockResolvedValue(richWriting),
+    }
+    const semanticAnalyzer = {
+      analyze: vi.fn().mockResolvedValue(richSemantic),
+    }
+    const formattingAnalyzer = {
+      analyze: vi.fn().mockReturnValue(richFormatting),
+    }
+    const pipeline = new TemplateCreationPipeline(
+      { extract: vi.fn().mockResolvedValue(document) },
+      structureAnalyzer,
+      writingAnalyzer,
+      semanticAnalyzer,
+      formattingAnalyzer,
+      builder,
+    )
+    const progress: number[] = []
+
+    const result = await pipeline.executeV2('modelo.docx', (item) =>
+      progress.push(item.step),
+    )
+
+    expect(structureAnalyzer.analyze).toHaveBeenCalledWith(document)
+    expect(writingAnalyzer.analyze).toHaveBeenCalledWith(
+      document,
+      richStructure,
+    )
+    expect(semanticAnalyzer.analyze).toHaveBeenCalledWith(
+      document,
+      richStructure,
+      richWriting,
+    )
+    expect(formattingAnalyzer.analyze).toHaveBeenCalledWith(document)
+    expect(buildV2).toHaveBeenCalledWith({
+      document,
+      structure: richStructure,
+      writing: richWriting,
+      semantic: richSemantic,
+      formatting: richFormatting,
+    })
+    expect(progress).toEqual([1, 2, 3, 4, 5, 6, 7])
+    expect(result.version).toBe(REPORT_TEMPLATE_V2_VERSION)
+    expect(result.metadata.status).toBe('draft')
+    expect(result.structurePattern.hierarchy[0]?.children[0]?.name).toBe(
+      'Execução',
+    )
+    expect(result.fields[0]?.evidence[0]).toEqual(fieldEvidence)
+    expect(result.activityPatterns[0]?.fields[0]?.evidence[0]).toEqual(
+      fieldEvidence,
+    )
+    expect(
+      result.writingPattern.sectionStyles[0]?.developmentPatterns[0],
+    ).toEqual(writingRule)
+    expect(
+      result.semanticPattern.sections[0]?.excludedInformation[0]?.evidence[0],
+    ).toEqual(semanticEvidence)
+    expect(result.semanticPattern.sections[0]?.relationships[0]).toEqual(
+      expect.objectContaining({
+        targetSection: 'Resultado',
+        evidence: [semanticEvidence],
+      }),
+    )
+    expect(result.formattingPattern.headingStyles[0]).toEqual(
+      expect.objectContaining({
+        formatting: expect.objectContaining({ fontSizePt: 13, bold: true }),
+        evidence: { elementIds: ['heading-execucao'], occurrences: 3 },
+      }),
+    )
+    expect(result.formattingPattern.documentStyle.margins).toEqual({
+      topPt: 72,
+      rightPt: 60,
+      bottomPt: 72,
+      leftPt: 60,
+    })
+    expect(result.requirements).toEqual({
+      requiredElements: ['Atividade', 'Execução'],
+      optionalElements: ['Observações'],
+      repeatableElements: ['Atividade', 'Atividade {n}'],
+    })
+    expect(
+      typeof result.writingPattern.sectionStyles[0]?.developmentPatterns[0],
+    ).toBe('object')
+    expect(typeof result.semanticPattern.sections[0]?.relationships[0]).toBe(
+      'object',
+    )
+    expect(typeof result.formattingPattern.headingStyles[0]).toBe('object')
   })
 })
