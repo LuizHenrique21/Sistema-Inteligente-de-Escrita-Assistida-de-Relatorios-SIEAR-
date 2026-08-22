@@ -58,7 +58,7 @@ O equipamento apresentou funcionamento normal.`,
 
   it('rejeita arquivo inexistente', async () => {
     await expect(
-      service.extract(path.join(directory, 'ausente.txt')),
+      service.extract(path.join(directory, 'ausente.docx')),
     ).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' })
   })
 

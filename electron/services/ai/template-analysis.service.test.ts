@@ -12,11 +12,41 @@ const document: ExtractedDocument = {
   fileType: 'txt',
   text: 'Data: 20/08/2026\nResponsável: João Silva\nEquipamento: Notebook Dell',
   sections: [
-    { id: '1', title: 'Objetivo', level: 1, order: 1, content: 'Manutenção.' },
+    {
+      id: '1',
+      title: 'Objetivo',
+      level: 1,
+      order: 1,
+      content: 'Manutenção.',
+      parentSectionId: null,
+    },
   ],
   paragraphs: [],
+  elements: [],
+  headings: [],
+  lists: [],
   tables: [],
-  metadata: { fileSize: 100, extractedAt: new Date().toISOString() },
+  figures: [],
+  headers: [],
+  footers: [],
+  pageInformation: {
+    widthPt: null,
+    heightPt: null,
+    orientation: null,
+    margins: { topPt: null, rightPt: null, bottomPt: null, leftPt: null },
+    pageBreakCount: 0,
+    hasPageNumbering: false,
+  },
+  formatting: { defaultParagraph: {} },
+  styles: [],
+  metadata: {
+    fileSize: 100,
+    extractedAt: new Date().toISOString(),
+    title: null,
+    author: null,
+    createdAt: null,
+    modifiedAt: null,
+  },
 }
 
 export const validAnalysis: TemplateAnalysis = {

@@ -20,7 +20,7 @@ async function selectAndAnalyzeTemplate(): Promise<ImportTemplateResult> {
   const selection = await dialog.showOpenDialog({
     title: 'Importar relatório existente',
     properties: ['openFile'],
-    filters: [{ name: 'Relatórios suportados', extensions: ['docx', 'txt'] }],
+    filters: [{ name: 'Documento do Word', extensions: ['docx'] }],
   })
   if (selection.canceled || !selection.filePaths[0]) {
     return {

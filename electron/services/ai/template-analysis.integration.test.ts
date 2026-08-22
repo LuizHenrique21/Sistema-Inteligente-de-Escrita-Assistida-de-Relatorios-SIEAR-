@@ -20,6 +20,7 @@ integrationTest(
           level: 1,
           order: 1,
           content: 'Realizar manutenção.',
+          parentSectionId: null,
         },
         {
           id: '2',
@@ -27,6 +28,7 @@ integrationTest(
           level: 1,
           order: 2,
           content: 'Substituição do HD.',
+          parentSectionId: null,
         },
         {
           id: '3',
@@ -34,6 +36,7 @@ integrationTest(
           level: 1,
           order: 3,
           content: 'Funcionamento normal.',
+          parentSectionId: null,
         },
         {
           id: '4',
@@ -41,11 +44,35 @@ integrationTest(
           level: 1,
           order: 4,
           content: 'Manutenção concluída.',
+          parentSectionId: null,
         },
       ],
       paragraphs: [],
+      elements: [],
+      headings: [],
+      lists: [],
       tables: [],
-      metadata: { fileSize: 300, extractedAt: new Date().toISOString() },
+      figures: [],
+      headers: [],
+      footers: [],
+      pageInformation: {
+        widthPt: null,
+        heightPt: null,
+        orientation: null,
+        margins: { topPt: null, rightPt: null, bottomPt: null, leftPt: null },
+        pageBreakCount: 0,
+        hasPageNumbering: false,
+      },
+      formatting: { defaultParagraph: {} },
+      styles: [],
+      metadata: {
+        fileSize: 300,
+        extractedAt: new Date().toISOString(),
+        title: null,
+        author: null,
+        createdAt: null,
+        modifiedAt: null,
+      },
     }
 
     const analysis = await new TemplateAnalysisService(
