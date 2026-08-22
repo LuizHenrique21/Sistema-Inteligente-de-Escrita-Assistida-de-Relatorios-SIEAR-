@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ReportTemplatesPage } from './pages/ReportTemplatesPage'
+import { aiService } from './services/ai.service'
 import { templatesService } from './services/templates.service'
+import type { GeneratedReport } from './types/generated-report'
 import type { ReportTemplate } from './types/report-template'
 import type { AppInfo, ReportInformation } from './types/siear-api'
 
@@ -19,6 +21,10 @@ function App() {
   const [report, setReport] = useState<ReportInformation | null>(null)
   const [extractionError, setExtractionError] = useState('')
   const [isExtracting, setIsExtracting] = useState(false)
+  const [generatedReport, setGeneratedReport] =
+    useState<GeneratedReport | null>(null)
+  const [generationError, setGenerationError] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
   const [activePage, setActivePage] = useState<'extract' | 'templates'>(
     'extract',
   )
@@ -78,9 +84,11 @@ function App() {
     setIsExtracting(true)
     setExtractionError('')
     setReport(null)
+    setGeneratedReport(null)
+    setGenerationError('')
 
     try {
-      const result = await window.siear.ai.extractReportInformation({
+      const result = await aiService.extractReportInformation({
         text: normalizedDescription,
       })
 
@@ -93,6 +101,26 @@ function App() {
     }
   }
 
+  async function generateReport(): Promise<void> {
+    if (!report || !selectedTemplateId || isGenerating) return
+    setIsGenerating(true)
+    setGenerationError('')
+    setGeneratedReport(null)
+
+    try {
+      const result = await aiService.generateReport({
+        information: report,
+        templateId: selectedTemplateId,
+      })
+      if (result.success) setGeneratedReport(result.data)
+      else setGenerationError(result.error.message)
+    } catch {
+      setGenerationError('Não foi possível comunicar com o processo principal.')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
   return (
     <main className="shell">
       <nav className="main-navigation" aria-label="Navegação principal">
@@ -101,7 +129,7 @@ function App() {
           type="button"
           onClick={() => setActivePage('extract')}
         >
-          Extração
+          Novo Relatório
         </button>
         <button
           className={activePage === 'templates' ? 'active' : ''}
@@ -151,7 +179,7 @@ function App() {
 
           <section className="card extraction-card">
             <span className="eyebrow">Dados estruturados</span>
-            <h2>Extração de informações</h2>
+            <h2>Novo Relatório</h2>
             <p className="section-description">
               Descreva a atividade livremente. O SIEAR extrairá somente as
               informações fornecidas.
@@ -160,7 +188,11 @@ function App() {
             <select
               id="report-template"
               value={selectedTemplateId}
-              onChange={(event) => setSelectedTemplateId(event.target.value)}
+              onChange={(event) => {
+                setSelectedTemplateId(event.target.value)
+                setGeneratedReport(null)
+                setGenerationError('')
+              }}
             >
               {templates.map((template) => (
                 <option value={template.id} key={template.id}>
@@ -182,7 +214,13 @@ function App() {
             <textarea
               id="report-description"
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => {
+                setDescription(event.target.value)
+                setReport(null)
+                setGeneratedReport(null)
+                setExtractionError('')
+                setGenerationError('')
+              }}
               placeholder="Descreva a atividade realizada..."
               rows={7}
               disabled={isExtracting}
@@ -192,7 +230,7 @@ function App() {
               onClick={extractInformation}
               disabled={isExtracting || description.trim() === ''}
             >
-              {isExtracting ? 'Extraindo...' : 'Extrair informações'}
+              {isExtracting ? 'Analisando...' : 'Analisar informações'}
             </button>
 
             {extractionError && (
@@ -245,7 +283,46 @@ function App() {
                   <summary>Ver JSON</summary>
                   <pre>{JSON.stringify(report, null, 2)}</pre>
                 </details>
+                <button
+                  className="generate-report-button"
+                  type="button"
+                  onClick={generateReport}
+                  disabled={isGenerating || !selectedTemplateId}
+                >
+                  {isGenerating ? 'Gerando relatório...' : 'Gerar relatório'}
+                </button>
               </div>
+            )}
+
+            {generationError && (
+              <div className="message error-message" role="alert">
+                <strong>Não foi possível gerar o relatório</strong>
+                <p>{generationError}</p>
+              </div>
+            )}
+
+            {generatedReport && (
+              <article className="generated-report" aria-live="polite">
+                <header>
+                  <span className="eyebrow">Relatório gerado</span>
+                  <h2>{generatedReport.templateName}</h2>
+                  <time dateTime={generatedReport.createdAt}>
+                    {new Date(generatedReport.createdAt).toLocaleString(
+                      'pt-BR',
+                    )}
+                  </time>
+                </header>
+                {[...generatedReport.sections]
+                  .sort((first, second) => first.order - second.order)
+                  .map((section) => (
+                    <section key={section.id}>
+                      <h3>
+                        {section.order}. {section.name}
+                      </h3>
+                      <p>{section.content}</p>
+                    </section>
+                  ))}
+              </article>
             )}
           </section>
         </div>

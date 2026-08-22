@@ -25,6 +25,7 @@ export function isReportTemplate(value: unknown): value is ReportTemplate {
 
   const template = value as Record<string, unknown>
   if (!Array.isArray(template.sections)) return false
+  if (!Array.isArray(template.fields)) return false
 
   const validSections = template.sections.every((value: unknown) => {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -41,6 +42,24 @@ export function isReportTemplate(value: unknown): value is ReportTemplate {
     )
   })
 
+  const validFields = template.fields.every((value: unknown) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return false
+    }
+    const field = value as Record<string, unknown>
+    return (
+      typeof field.id === 'string' &&
+      typeof field.name === 'string' &&
+      typeof field.label === 'string' &&
+      (field.type === 'text' ||
+        field.type === 'date' ||
+        field.type === 'number' ||
+        field.type === 'boolean') &&
+      typeof field.required === 'boolean' &&
+      typeof field.description === 'string'
+    )
+  })
+
   return (
     typeof template.id === 'string' &&
     typeof template.name === 'string' &&
@@ -52,6 +71,7 @@ export function isReportTemplate(value: unknown): value is ReportTemplate {
       template.formality === 'medium' ||
       template.formality === 'high') &&
     validSections &&
+    validFields &&
     isStringArray(template.writingRules) &&
     isStringArray(template.recommendedVocabulary) &&
     isStringArray(template.forbiddenExpressions)
@@ -101,6 +121,19 @@ function validateTemplate(template: ReportTemplate): void {
     sectionIds.add(section.id)
     sectionOrders.add(section.order)
   }
+
+  const fieldIds = new Set<string>()
+  for (const field of template.fields) {
+    requireText(field.id, 'ID do campo')
+    requireText(field.name, 'Nome do campo')
+    if (fieldIds.has(field.id)) {
+      throw new ReportTemplateServiceError(
+        'DUPLICATE_ID',
+        `O ID de campo "${field.id}" está duplicado.`,
+      )
+    }
+    fieldIds.add(field.id)
+  }
 }
 
 function normalizeTemplate(template: ReportTemplate): ReportTemplate {
@@ -120,6 +153,13 @@ function normalizeTemplate(template: ReportTemplate): ReportTemplate {
         description: section.description.trim(),
       }))
       .sort((first, second) => first.order - second.order),
+    fields: template.fields.map((field) => ({
+      ...field,
+      id: field.id.trim(),
+      name: field.name.trim(),
+      label: field.label.trim(),
+      description: field.description.trim(),
+    })),
   }
 }
 

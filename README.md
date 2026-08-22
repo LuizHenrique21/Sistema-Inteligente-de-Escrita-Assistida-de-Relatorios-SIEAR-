@@ -68,3 +68,13 @@ Fluxo:
 `React → window.siear.templates → preload → templates:* → ReportTemplateService → InMemoryReportTemplateRepository`
 
 O modelo inicial “Relatório Técnico” define quatro seções obrigatórias e regras básicas de escrita. A interface permite visualizar, criar, editar, excluir e selecionar modelos; a seleção ainda não gera relatórios.
+
+## Geração de relatório
+
+A tela “Novo Relatório” executa duas etapas: primeiro transforma a descrição em `ReportInformation`; depois combina essas informações com o modelo selecionado para produzir um `GeneratedReport`.
+
+Fluxo:
+
+`ReportInformation + templateId → IPC → ReportTemplateRepository → ReportPromptBuilder → ReportGenerationService → Ollama → GeneratedReport`
+
+O template é buscado no Main Process pelo ID e nunca é aceito do Renderer como fonte confiável. A resposta do Ollama usa JSON Schema e ainda passa por validação de seções obrigatórias, nomes, conteúdo e ordem antes de chegar à interface.

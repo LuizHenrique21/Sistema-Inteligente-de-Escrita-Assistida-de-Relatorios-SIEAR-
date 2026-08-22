@@ -25,6 +25,7 @@ function template(overrides: Partial<ReportTemplate> = {}): ReportTemplate {
         order: 1,
       },
     ],
+    fields: [],
     writingRules: [],
     recommendedVocabulary: [],
     forbiddenExpressions: [],

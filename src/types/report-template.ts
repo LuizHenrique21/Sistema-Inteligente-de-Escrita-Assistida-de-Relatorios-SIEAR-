@@ -8,6 +8,17 @@ export interface ReportSection {
   order: number
 }
 
+export type ReportFieldType = 'text' | 'date' | 'number' | 'boolean'
+
+export interface ReportField {
+  id: string
+  name: string
+  label: string
+  type: ReportFieldType
+  required: boolean
+  description: string
+}
+
 export interface ReportTemplate {
   id: string
   name: string
@@ -17,6 +28,7 @@ export interface ReportTemplate {
   style: string
   formality: ReportFormality
   sections: ReportSection[]
+  fields: ReportField[]
   writingRules: string[]
   recommendedVocabulary: string[]
   forbiddenExpressions: string[]

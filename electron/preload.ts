@@ -7,6 +7,8 @@ const siearApi: SiearApi = {
     generate: (request) => ipcRenderer.invoke('ai:generate', request),
     extractReportInformation: (request) =>
       ipcRenderer.invoke('ai:extract-report-information', request),
+    generateReport: (request) =>
+      ipcRenderer.invoke('ai:generate-report', request),
   },
   templates: {
     getAll: () => ipcRenderer.invoke('templates:get-all'),
@@ -15,6 +17,10 @@ const siearApi: SiearApi = {
     update: (id, template) =>
       ipcRenderer.invoke('templates:update', id, template),
     delete: (id) => ipcRenderer.invoke('templates:delete', id),
+  },
+  documents: {
+    selectAndAnalyzeTemplate: () =>
+      ipcRenderer.invoke('documents:select-and-analyze-template'),
   },
 }
 

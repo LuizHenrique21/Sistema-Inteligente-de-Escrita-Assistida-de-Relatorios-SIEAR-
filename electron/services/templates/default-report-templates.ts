@@ -39,6 +39,7 @@ export const TECHNICAL_REPORT_TEMPLATE: ReportTemplate = {
       order: 4,
     },
   ],
+  fields: [],
   writingRules: [
     'Utilizar linguagem formal.',
     'Evitar informações não fornecidas pelo usuário.',

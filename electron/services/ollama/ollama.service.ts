@@ -35,11 +35,17 @@ function isOllamaChatResponse(value: unknown): value is OllamaChatResponse {
 }
 
 export class OllamaService {
-  generateJson(prompt: string): Promise<string> {
-    return this.generate(prompt, true)
+  generateJson(
+    prompt: string,
+    schema?: Record<string, unknown>,
+  ): Promise<string> {
+    return this.generate(prompt, schema ?? 'json')
   }
 
-  async generate(prompt: string, jsonFormat = false): Promise<string> {
+  async generate(
+    prompt: string,
+    format?: 'json' | Record<string, unknown>,
+  ): Promise<string> {
     let response: Response
 
     try {
@@ -50,7 +56,7 @@ export class OllamaService {
           model: OLLAMA_MODEL,
           messages: [{ role: 'user', content: prompt }],
           stream: false,
-          ...(jsonFormat ? { format: 'json' } : {}),
+          ...(format ? { format } : {}),
         }),
         signal: AbortSignal.timeout(OLLAMA_TIMEOUT_MS),
       })

@@ -1,14 +1,8 @@
 import { ipcMain } from 'electron'
-import { InMemoryReportTemplateRepository } from '../repositories/templates/in-memory-report-template.repository'
-import { TECHNICAL_REPORT_TEMPLATE } from '../services/templates/default-report-templates'
-import { ReportTemplateService } from '../services/templates/report-template.service'
+import { reportTemplateService } from '../services/templates/report-template.container'
 import { createTemplatesHandlers } from './templates.handler'
 
-const repository = new InMemoryReportTemplateRepository([
-  TECHNICAL_REPORT_TEMPLATE,
-])
-const service = new ReportTemplateService(repository)
-const handlers = createTemplatesHandlers(service)
+const handlers = createTemplatesHandlers(reportTemplateService)
 
 export function registerTemplatesIpc(): void {
   ipcMain.handle('templates:get-all', () => handlers.getAll())

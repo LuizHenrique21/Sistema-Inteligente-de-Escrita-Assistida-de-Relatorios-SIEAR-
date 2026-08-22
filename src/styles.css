@@ -225,6 +225,45 @@ textarea:disabled {
   padding-top: 24px;
   border-top: 1px solid #dfe9e2;
 }
+.generate-report-button {
+  margin-top: 20px;
+}
+.generated-report {
+  margin-top: 28px;
+  padding: 28px;
+  border: 1px solid #d8e5dc;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 14px 38px rgba(31, 66, 51, 0.08);
+}
+.generated-report header {
+  padding-bottom: 18px;
+  border-bottom: 2px solid #245c43;
+}
+.generated-report header h2 {
+  margin: 7px 0 4px;
+}
+.generated-report time {
+  color: #6b7c73;
+  font-size: 0.8rem;
+}
+.generated-report > section {
+  padding: 20px 0;
+  border-bottom: 1px solid #e3ebe6;
+}
+.generated-report > section:last-child {
+  border-bottom: 0;
+}
+.generated-report > section h3 {
+  margin: 0 0 8px;
+  color: #214d39;
+  font-size: 1.08rem;
+}
+.generated-report > section p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.75;
+}
 .report-result h3 {
   margin: 0 0 14px;
   font-size: 1.15rem;
@@ -336,6 +375,57 @@ pre {
 }
 .template-content h3 {
   margin-top: 0;
+}
+.creation-options {
+  display: grid;
+  gap: 14px;
+}
+.creation-option {
+  display: grid;
+  gap: 4px;
+  padding: 20px;
+  text-align: left;
+  color: #30493e;
+  border: 1px solid #ccddd2;
+  background: #f7faf8;
+}
+.creation-option.recommended {
+  border: 2px solid #31704f;
+  background: #eef7f1;
+}
+.creation-option span {
+  color: #31704f;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.creation-option p {
+  margin: 4px 0 0;
+  color: #65776e;
+  font-weight: 400;
+}
+.review-notice {
+  padding: 14px;
+  border-left: 3px solid #31704f;
+  color: #52635b;
+  background: #eef7f1;
+}
+.empty-hint {
+  color: #6b7c73;
+}
+.field-editor {
+  grid-template-columns: 1fr 1fr 120px auto auto;
+}
+.field-editor .full-field {
+  grid-column: 1 / -1;
+}
+.rules-editor {
+  margin-bottom: 28px;
+}
+.rules-editor label > span {
+  color: #728178;
+  font-size: 0.75rem;
+  font-weight: 400;
 }
 .form-grid {
   display: grid;
@@ -455,6 +545,9 @@ pre {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
   .section-editor {
+    grid-template-columns: 1fr 1fr;
+  }
+  .field-editor {
     grid-template-columns: 1fr 1fr;
   }
 }

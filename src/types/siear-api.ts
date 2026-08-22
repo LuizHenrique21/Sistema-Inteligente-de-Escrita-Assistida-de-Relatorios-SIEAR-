@@ -1,3 +1,10 @@
+import type {
+  GenerateReportRequest,
+  GenerateReportResult,
+} from './generated-report'
+import type { TemplatesApi } from './report-template'
+import type { DocumentsApi } from './template-import'
+
 export interface AppInfo {
   name: string
   version: string
@@ -71,7 +78,10 @@ export interface SiearApi {
     extractReportInformation: (
       request: ExtractReportInformationRequest,
     ) => Promise<ExtractReportInformationResult>
+    generateReport: (
+      request: GenerateReportRequest,
+    ) => Promise<GenerateReportResult>
   }
   templates: TemplatesApi
+  documents: DocumentsApi
 }
-import type { TemplatesApi } from './report-template'
