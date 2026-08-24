@@ -4,6 +4,7 @@ export class DocumentExtractionError extends Error {
       | 'FILE_NOT_FOUND'
       | 'UNSUPPORTED_FORMAT'
       | 'EMPTY_DOCUMENT'
+      | 'DOCX_LIMIT_EXCEEDED'
       | 'EXTRACTION_FAILED',
     message: string,
   ) {

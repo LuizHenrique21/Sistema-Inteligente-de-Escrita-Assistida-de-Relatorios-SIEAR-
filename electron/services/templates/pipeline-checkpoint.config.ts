@@ -4,13 +4,16 @@ import {
   SEMANTIC_PATTERN_STAGE_VERSION,
 } from '../ai/semantic-analysis.service'
 import {
-  WRITING_ANALYSIS_SECTION_BATCH_SIZE,
   WRITING_ANALYZER_VERSION,
   WRITING_PATTERN_STAGE_VERSION,
 } from '../ai/writing-analysis.service'
 import { SEMANTIC_ANALYSIS_PROMPT_VERSION } from '../ai/prompts/semantic-analysis.prompt'
 import { STRUCTURE_ANALYSIS_PROMPT_VERSION } from '../ai/prompts/structure-analysis.prompt'
-import { WRITING_ANALYSIS_PROMPT_VERSION } from '../ai/prompts/writing-analysis.prompt'
+import {
+  WRITING_ANALYSIS_CONTEXT_LIMIT_CHARS,
+  WRITING_ANALYSIS_PROMPT_VERSION,
+  WRITING_ANALYSIS_SECTION_LIMIT_CHARS,
+} from '../ai/prompts/writing-analysis.prompt'
 import {
   DOCUMENT_EXTRACTION_ANALYZER_VERSION,
   DOCUMENT_REPRESENTATION_STAGE_VERSION,
@@ -70,7 +73,9 @@ export function createPipelineCheckpointCompatibility(
       model: ollamaModel,
       configurationHash: configurationHash({
         structuredJson: true,
-        sectionBatchSize: WRITING_ANALYSIS_SECTION_BATCH_SIZE,
+        maxBatchCharacters: WRITING_ANALYSIS_CONTEXT_LIMIT_CHARS,
+        maxSectionCharacters: WRITING_ANALYSIS_SECTION_LIMIT_CHARS,
+        stableSectionIds: true,
       }),
     },
     semantic: {

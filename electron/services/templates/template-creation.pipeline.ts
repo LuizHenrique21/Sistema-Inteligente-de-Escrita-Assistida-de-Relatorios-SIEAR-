@@ -8,6 +8,10 @@ import type { ReportTemplate } from '../../../src/domain/templates/report-templa
 import type { DocumentRepresentation } from '../documents/types'
 import type { TemplateImportProgress } from '../../../src/types/template-import'
 import type { ReportTemplateBuilderInput } from './report-template.builder'
+import {
+  createDocumentAnalysisContext,
+  type DocumentAnalysisContext,
+} from '../documents/document-analysis-context'
 import { getLogger } from '../../infrastructure/logging/logger.runtime'
 import { serializeError } from '../../infrastructure/logging/log-sanitizer'
 import { combineCheckpointHashes, hashCheckpointResult, hashDocumentFile } from './pipeline-checkpoint.hash'
@@ -25,26 +29,30 @@ export interface PipelineDocumentExtractor {
 }
 
 export interface PipelineStructureAnalyzer {
-  analyze(document: DocumentRepresentation): Promise<StructurePattern>
+  analyze(
+    document: DocumentRepresentation | DocumentAnalysisContext,
+  ): Promise<StructurePattern>
 }
 
 export interface PipelineWritingAnalyzer {
   analyze(
-    document: DocumentRepresentation,
+    document: DocumentRepresentation | DocumentAnalysisContext,
     structure: StructurePattern,
   ): Promise<WritingPattern>
 }
 
 export interface PipelineSemanticAnalyzer {
   analyze(
-    document: DocumentRepresentation,
+    document: DocumentRepresentation | DocumentAnalysisContext,
     structure: StructurePattern,
     writing: WritingPattern,
   ): Promise<SemanticPattern>
 }
 
 export interface PipelineFormattingAnalyzer {
-  analyze(document: DocumentRepresentation): FormattingPattern
+  analyze(
+    document: DocumentRepresentation | DocumentAnalysisContext,
+  ): FormattingPattern | Promise<FormattingPattern>
 }
 
 export interface PipelineTemplateBuilder {
@@ -156,6 +164,7 @@ export class TemplateCreationPipeline {
       checkpointResultValidators.extraction,
     )
     const document = documentStage.value
+    const extractionContext = createDocumentAnalysisContext(document)
     extractionTimer.end('Document extraction completed', {
       sections: document.sections?.length ?? 0,
       paragraphs: document.paragraphs?.length ?? 0,
@@ -170,10 +179,13 @@ export class TemplateCreationPipeline {
       'structure',
       documentHash,
       combineCheckpointHashes(documentStage.resultHash),
-      () => this.structureAnalyzer.analyze(document),
+      () => this.structureAnalyzer.analyze(extractionContext),
       checkpointResultValidators.structure,
     )
     const structure = structureStage.value
+    const analysisContext = createDocumentAnalysisContext(document, {
+      structure,
+    })
     structureTimer.end('Structure analysis completed', {
       sections: structure.sections?.length ?? 0,
       fields: structure.fields?.length ?? 0,
@@ -190,7 +202,7 @@ export class TemplateCreationPipeline {
         documentStage.resultHash,
         structureStage.resultHash,
       ),
-      () => this.writingAnalyzer.analyze(document, structure),
+      () => this.writingAnalyzer.analyze(analysisContext, structure),
       (value): value is WritingPattern =>
         isCheckpointWriting(value, document, structure),
     )
@@ -213,7 +225,7 @@ export class TemplateCreationPipeline {
         structureStage.resultHash,
         writingStage.resultHash,
       ),
-      () => this.semanticAnalyzer.analyze(document, structure, writing),
+      () => this.semanticAnalyzer.analyze(analysisContext, structure, writing),
       (value): value is SemanticPattern =>
         isCheckpointSemantic(value, document, structure, writing),
     )
@@ -230,7 +242,7 @@ export class TemplateCreationPipeline {
       'formatting',
       documentHash,
       combineCheckpointHashes(documentStage.resultHash),
-      () => this.formattingAnalyzer.analyze(document),
+      () => this.formattingAnalyzer.analyze(analysisContext),
       checkpointResultValidators.formatting,
     )
     const formatting = formattingStage.value

@@ -4,6 +4,14 @@ import path from 'node:path'
 import JSZip from 'jszip'
 import mammoth from 'mammoth'
 import { DocumentExtractionError } from './document-errors'
+import {
+  firstDocxLimitViolation,
+  inspectDocxArchive,
+  maxXmlStructuralDepth,
+  resolveDocxProcessingLimits,
+  type DocxProcessingLimits,
+} from './docx-processing-limits'
+import { resolveCpuWorkerPolicy } from '../workers/cpu-worker-policy'
 import type {
   DocumentExtractor,
   DocumentHeaderFooter,
@@ -28,6 +36,32 @@ const EMPTY: ParagraphFormatting = {
   indentRightPt: null,
   firstLineIndentPt: null,
   styleId: null,
+}
+
+function countMatches(value: string, pattern: RegExp): number {
+  return [...value.matchAll(pattern)].length
+}
+
+export interface DocxExtractorOptions {
+  limits?: Partial<DocxProcessingLimits>
+  useWorker?: boolean
+  workerThresholdBytes?: number
+  requestId?: string
+  signal?: AbortSignal
+  timeoutMs?: number
+}
+
+function docxWorkerThreshold(options: DocxExtractorOptions): number {
+  return options.workerThresholdBytes ?? resolveCpuWorkerPolicy().extractionThresholdBytes
+}
+
+function shouldUseDocxWorker(
+  fileSize: number,
+  options: DocxExtractorOptions,
+): boolean {
+  if (options.useWorker === false) return false
+  if (options.useWorker === true) return true
+  return fileSize >= docxWorkerThreshold(options)
 }
 
 function decode(value: string): string {
@@ -221,13 +255,63 @@ function headerFooter(
 }
 
 export class DocxExtractor implements DocumentExtractor {
+  private readonly limits: DocxProcessingLimits
+  private readonly options: DocxExtractorOptions
+
+  constructor(options: Partial<DocxProcessingLimits> | DocxExtractorOptions = {}) {
+    const hasExtractorOptions =
+      'limits' in options ||
+      'useWorker' in options ||
+      'workerThresholdBytes' in options ||
+      'requestId' in options ||
+      'signal' in options ||
+      'timeoutMs' in options
+    this.options = hasExtractorOptions
+      ? (options as DocxExtractorOptions)
+      : { limits: options as Partial<DocxProcessingLimits> }
+    this.limits = resolveDocxProcessingLimits(this.options.limits)
+  }
+
   async extract(filePath: string): Promise<DocumentRepresentation> {
     try {
-      const [buffer, file] = await Promise.all([
-        readFile(filePath),
-        stat(filePath),
-      ])
+      const file = await stat(filePath)
+      if (file.size > this.limits.maxCompressedBytes)
+        throw new DocumentExtractionError(
+          'DOCX_LIMIT_EXCEEDED',
+          `DOCX possui ${file.size} bytes comprimidos; limite ${this.limits.maxCompressedBytes}.`,
+        )
+      if (shouldUseDocxWorker(file.size, this.options)) {
+        const { runCpuWorkerTask } = await import(
+          '../workers/cpu-bound-worker.host'
+        )
+        const result = await runCpuWorkerTask(
+          'docx-extraction',
+          {
+            filePath,
+            fileName: path.basename(filePath),
+            fileSize: file.size,
+            limits: this.limits,
+          },
+          {
+            requestId: this.options.requestId,
+            signal: this.options.signal,
+            timeoutMs: this.options.timeoutMs ?? resolveCpuWorkerPolicy().timeoutMs,
+          },
+        )
+        return result.value
+      }
+      const buffer = await readFile(filePath)
       const zip = await JSZip.loadAsync(buffer)
+      const archiveStats = inspectDocxArchive(zip.files)
+      const archiveViolation = firstDocxLimitViolation(
+        archiveStats,
+        this.limits,
+      )
+      if (archiveViolation)
+        throw new DocumentExtractionError(
+          'DOCX_LIMIT_EXCEEDED',
+          archiveViolation,
+        )
       const readXml = async (name: string): Promise<string> =>
         zip.file(name)?.async('text') ?? ''
       const [documentXml, stylesXml, relsXml, coreXml, numberingXml] =
@@ -239,6 +323,24 @@ export class DocxExtractor implements DocumentExtractor {
           readXml('word/numbering.xml'),
         ])
       if (!documentXml) throw new Error('word/document.xml ausente')
+      const paragraphCount = countMatches(documentXml, /<w:p\b/gi)
+      if (paragraphCount > this.limits.maxParagraphs)
+        throw new DocumentExtractionError(
+          'DOCX_LIMIT_EXCEEDED',
+          `DOCX possui ${paragraphCount} paragrafos; limite ${this.limits.maxParagraphs}.`,
+        )
+      const tableCount = countMatches(documentXml, /<w:tbl\b/gi)
+      if (tableCount > this.limits.maxTables)
+        throw new DocumentExtractionError(
+          'DOCX_LIMIT_EXCEEDED',
+          `DOCX possui ${tableCount} tabelas; limite ${this.limits.maxTables}.`,
+        )
+      const structuralDepth = maxXmlStructuralDepth(documentXml)
+      if (structuralDepth > this.limits.maxStructuralDepth)
+        throw new DocumentExtractionError(
+          'DOCX_LIMIT_EXCEEDED',
+          `DOCX possui profundidade estrutural ${structuralDepth}; limite ${this.limits.maxStructuralDepth}.`,
+        )
       const styles = parseStyles(stylesXml)
       const rels = relationships(relsXml)
       const numbering = numberingProperties(numberingXml)
@@ -400,6 +502,11 @@ export class DocxExtractor implements DocumentExtractor {
           elements.push({ id: figure.id, type: 'figure', order: figure.order })
         }
       }
+      if (sections.length > this.limits.maxSections)
+        throw new DocumentExtractionError(
+          'DOCX_LIMIT_EXCEEDED',
+          `DOCX possui ${sections.length} secoes; limite ${this.limits.maxSections}.`,
+        )
       for (const figure of figures) {
         const next = paragraphs.find(
           (paragraph) => paragraph.order > figure.order,

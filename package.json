@@ -7,12 +7,13 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && vite build --config vite.worker.config.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "benchmark:baseline": "vitest run --config vitest.baseline.config.ts",
-    "benchmark:checkpoint": "vitest run --config vitest.checkpoint-benchmark.config.ts",
+    "benchmark:baseline": "node --env-file=.env ./node_modules/vitest/vitest.mjs run --config vitest.baseline.config.ts",
+    "benchmark:checkpoint": "node --env-file=.env ./node_modules/vitest/vitest.mjs run --config vitest.checkpoint-benchmark.config.ts",
+    "benchmark:workers": "node --env-file=.env ./node_modules/vitest/vitest.mjs run --config vitest.cpu-worker-benchmark.config.ts",
     "test:watch": "vitest",
     "typecheck": "tsc -b --noEmit",
     "dist": "npm run build && electron-builder"

@@ -248,6 +248,8 @@ describe('SemanticAnalysisService', () => {
       writing,
     )
     const prompt = generator.generateJson.mock.calls[0]?.[0] as string
+    expect(prompt).toContain('DOCUMENT_DATA_BEGIN')
+    expect(prompt).toContain('DOCUMENT_DATA_END')
     expect(prompt).toContain(sample)
     expect(prompt).not.toContain(document.text)
   })

@@ -18,6 +18,38 @@ import type {
   ExtractedParagraph,
   ParagraphFormatting,
 } from './types'
+import {
+  asDocumentAnalysisContext,
+  type DocumentAnalysisContext,
+} from './document-analysis-context'
+import { resolveCpuWorkerPolicy } from '../workers/cpu-worker-policy'
+
+export interface FormattingAnalysisServiceOptions {
+  useWorker?: boolean
+  workerThresholdParagraphs?: number
+  requestId?: string
+  signal?: AbortSignal
+  timeoutMs?: number
+}
+
+function formattingWorkerThreshold(
+  options: FormattingAnalysisServiceOptions,
+): number {
+  return (
+    options.workerThresholdParagraphs ??
+    resolveCpuWorkerPolicy().formattingThresholdParagraphs
+  )
+}
+
+function shouldUseFormattingWorker(
+  source: DocumentRepresentation | DocumentAnalysisContext,
+  options: FormattingAnalysisServiceOptions,
+): boolean {
+  if (options.useWorker === false) return false
+  if (options.useWorker === true) return true
+  const document = 'document' in source ? source.document : source
+  return document.paragraphs.length >= formattingWorkerThreshold(options)
+}
 
 const EMPTY_FORMATTING: ParagraphFormatting = {
   fontFamily: null,
@@ -37,14 +69,14 @@ const EMPTY_FORMATTING: ParagraphFormatting = {
 
 function styleChain(
   styleId: string | null,
-  styles: SourceDocumentStyle[],
+  styleById: ReadonlyMap<string, SourceDocumentStyle>,
 ): SourceDocumentStyle[] {
   const chain: SourceDocumentStyle[] = []
   const visited = new Set<string>()
   let current = styleId
   while (current && !visited.has(current)) {
     visited.add(current)
-    const style = styles.find((item) => item.id === current)
+    const style = styleById.get(current)
     if (!style) break
     chain.unshift(style)
     current = style.basedOn
@@ -67,14 +99,15 @@ function mergeFormatting(
 
 function resolveFormatting(
   paragraph: ExtractedParagraph,
-  document: DocumentRepresentation,
+  context: DocumentAnalysisContext,
 ): ParagraphFormatting {
+  const document = context.document
   let resolved: Partial<ParagraphFormatting> = {
     ...document.formatting.defaultParagraph,
   }
   for (const style of styleChain(
     paragraph.formatting.styleId,
-    document.styles,
+    context.styleById,
   )) {
     resolved = mergeFormatting(resolved, style.formatting)
   }
@@ -117,7 +150,34 @@ function paragraphWeight(paragraph: ExtractedParagraph): number {
 }
 
 export class FormattingAnalysisService {
-  analyze(document: DocumentRepresentation): FormattingPattern {
+  constructor(private readonly options: FormattingAnalysisServiceOptions = {}) {}
+
+  async analyze(
+    source: DocumentRepresentation | DocumentAnalysisContext,
+  ): Promise<FormattingPattern> {
+    if (shouldUseFormattingWorker(source, this.options)) {
+      const { runCpuWorkerTask } = await import(
+        '../workers/cpu-bound-worker.host'
+      )
+      const document = 'document' in source ? source.document : source
+      return await runCpuWorkerTask(
+        'formatting-analysis',
+        { document },
+        {
+          requestId: this.options.requestId,
+          signal: this.options.signal,
+          timeoutMs: this.options.timeoutMs ?? resolveCpuWorkerPolicy().timeoutMs,
+        },
+      ).then((result) => result.value)
+    }
+    return this.analyzeInMain(source)
+  }
+
+  private analyzeInMain(
+    source: DocumentRepresentation | DocumentAnalysisContext,
+  ): FormattingPattern {
+    const context = asDocumentAnalysisContext(source)
+    const document = context.document
     const timer = logger.startTimer('Formatting analysis')
     logger.info('Formatting analysis started', {
       paragraphs: document.paragraphs.length,
@@ -125,12 +185,11 @@ export class FormattingAnalysisService {
     const resolved = new Map(
       document.paragraphs.map((paragraph) => [
         paragraph.id,
-        resolveFormatting(paragraph, document),
+        resolveFormatting(paragraph, context),
       ]),
     )
     const sectionName = (sectionId: string | null): string | null =>
-      document.sections.find((section) => section.id === sectionId)?.title ??
-      null
+      sectionId ? (context.sectionById.get(sectionId)?.title ?? null) : null
 
     const headingGroups = new Map<
       string,
@@ -214,9 +273,7 @@ export class FormattingAnalysisService {
     const listStyles: ListStyle[] = document.lists.map((list) => {
       const itemParagraphs = list.items
         .map((item) =>
-          document.paragraphs.find(
-            (paragraph) => paragraph.id === item.paragraphId,
-          ),
+          context.paragraphById.get(item.paragraphId),
         )
         .filter((item): item is ExtractedParagraph => item !== undefined)
       const itemFormatting = itemParagraphs[0]

@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OllamaService, OllamaServiceError } from './ollama.service'
+import { createOllamaInferenceCoordinator } from './ollama-inference-coordinator'
 
 const service = new OllamaService()
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -129,6 +138,39 @@ describe('OllamaService', () => {
 
     expect(timeout).toHaveBeenCalledWith(456_000)
     timeout.mockRestore()
+  })
+
+  it('serializa chamadas simultâneas pelo coordenador central', async () => {
+    const first = deferred<Response>()
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: { content: 'segunda' } }), {
+          status: 200,
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    const coordinator = createOllamaInferenceCoordinator({ concurrency: 1 })
+    const service = new OllamaService({ coordinator })
+
+    const firstRun = service.generate('Primeira')
+    const secondRun = service.generate('Segunda')
+
+    await Promise.resolve()
+    expect(fetchMock).toHaveBeenCalledOnce()
+
+    first.resolve(
+      new Response(JSON.stringify({ message: { content: 'primeira' } }), {
+        status: 200,
+      }),
+    )
+
+    await expect(Promise.all([firstRun, secondRun])).resolves.toEqual([
+      'primeira',
+      'segunda',
+    ])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('envia o contrato esperado e retorna o conteúdo gerado', async () => {
