@@ -4,6 +4,10 @@ import type {
   GeneratedReport,
   GeneratedReportElement,
 } from '../../src/types/generated-report'
+import { getLogger } from '../infrastructure/logging/logger.runtime'
+import { serializeError } from '../infrastructure/logging/log-sanitizer'
+
+const logger = getLogger('ReportExportHandler')
 
 export interface ReportExportTemplateFinder {
   getById(id: string): Promise<ReportTemplate | null>
@@ -112,7 +116,9 @@ export function createReportExportHandler(
     try {
       template = await templates.getById(report.templateId)
     } catch (error: unknown) {
-      console.error('[SIEAR] Falha ao buscar modelo para exportação:', error)
+      logger.error('Report export template lookup failed', {
+        error: serializeError(error),
+      })
       return {
         success: false,
         error: {
@@ -134,7 +140,9 @@ export function createReportExportHandler(
     try {
       content = await renderer.render(report, template)
     } catch (error: unknown) {
-      console.error('[SIEAR] Falha ao renderizar relatório DOCX:', error)
+      logger.error('Report DOCX render failed', {
+        error: serializeError(error),
+      })
       return {
         success: false,
         error: {
@@ -148,7 +156,9 @@ export function createReportExportHandler(
     try {
       filePath = await destination.select(report)
     } catch (error: unknown) {
-      console.error('[SIEAR] Falha ao selecionar destino do DOCX:', error)
+      logger.error('Report destination selection failed', {
+        error: serializeError(error),
+      })
       return {
         success: false,
         error: {
@@ -166,7 +176,7 @@ export function createReportExportHandler(
       await files.write(filePath, content)
       return { success: true, filePath }
     } catch (error: unknown) {
-      console.error('[SIEAR] Falha ao gravar relatório DOCX:', error)
+      logger.error('Report DOCX write failed', { error: serializeError(error) })
       return {
         success: false,
         error: {

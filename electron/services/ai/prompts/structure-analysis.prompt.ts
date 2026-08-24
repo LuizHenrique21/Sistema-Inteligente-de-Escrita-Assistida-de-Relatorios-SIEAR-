@@ -1,5 +1,7 @@
 import type { DocumentRepresentation } from '../../documents/types'
 
+export const STRUCTURE_ANALYSIS_PROMPT_VERSION = '1' as const
+
 export interface StructureSemanticSummary {
   fileName: string
   title: string | null
@@ -44,6 +46,7 @@ export function buildStructureAnalysisPrompt(
 
 Receba somente o resumo estrutural fornecido. Não invente seções, campos, fatos ou evidências.
 Determine apenas o tipo provável do documento e a finalidade das seções cuja semântica seja reconhecível.
+No campo name, copie o nome da seção exatamente como aparece em headings ou sectionSamples. Não traduza, resuma ou renomeie seções.
 Se não houver evidência suficiente, use null. Responda exclusivamente JSON, sem Markdown.
 
 Formato obrigatório:

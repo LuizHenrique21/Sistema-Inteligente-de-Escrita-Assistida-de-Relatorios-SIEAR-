@@ -11,6 +11,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
+    "benchmark:baseline": "vitest run --config vitest.baseline.config.ts",
+    "benchmark:checkpoint": "vitest run --config vitest.checkpoint-benchmark.config.ts",
     "test:watch": "vitest",
     "typecheck": "tsc -b --noEmit",
     "dist": "npm run build && electron-builder"
@@ -35,8 +37,9 @@
     }
   },
   "dependencies": {
-    "mammoth": "^1.12.1",
+    "electron-log": "^5.4.4",
     "jszip": "^3.10.1",
+    "mammoth": "^1.12.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

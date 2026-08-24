@@ -10,6 +10,7 @@ export interface ReportTemplateCreationPipeline {
 
 export interface ReportTemplateRegistrar {
   create(template: ReportTemplate): Promise<ReportTemplate>
+  getById?(id: string): Promise<ReportTemplate | null>
 }
 
 export class ReportTemplateCreationService {
@@ -23,6 +24,10 @@ export class ReportTemplateCreationService {
     onProgress?: TemplateCreationProgressListener,
   ): Promise<ReportTemplate> {
     const analyzedTemplate = await this.pipeline.execute(filePath, onProgress)
+    const existing = await this.templateService.getById?.(
+      analyzedTemplate.metadata.id,
+    )
+    if (existing) return existing
     return this.templateService.create(analyzedTemplate)
   }
 }

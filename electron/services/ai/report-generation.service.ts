@@ -8,6 +8,9 @@ import type { ReportTemplate } from '../../../src/domain/templates/report-templa
 import { buildReportGenerationPrompt } from './prompts/report-generation.prompt'
 import type { StructuredTextGenerator } from './report-extraction.service'
 import { ReportGenerationServiceError } from './report-generation.error'
+import { getLogger } from '../../infrastructure/logging/logger.runtime'
+
+const logger = getLogger('ReportGenerationService')
 
 interface GroundedSection {
   sectionId: string
@@ -101,6 +104,10 @@ export class ReportGenerationService {
     plan: ReportGenerationPlan,
     template: ReportTemplate,
   ): Promise<GeneratedReport> {
+    const timer = logger.startTimer('Structured report writing', {
+      templateId: template.metadata.id,
+      plannedSections: plan.sections.length,
+    })
     const sectionIds = plan.sections.map((section) => section.sectionId)
     const names = plan.sections.map((section) => section.sectionName)
     const schema: Record<string, unknown> = {
@@ -163,7 +170,7 @@ export class ReportGenerationService {
         'A IA retornou as seções fora da ordem do modelo.',
       )
     validateNumericClaims(sections, information)
-    return {
+    const report: GeneratedReport = {
       id: randomUUID(),
       templateId: template.metadata.id,
       templateName: template.metadata.name,
@@ -178,5 +185,10 @@ export class ReportGenerationService {
         ],
       })),
     }
+    timer.end('Structured report writing completed', {
+      reportId: report.id,
+      sections: report.sections.length,
+    })
+    return report
   }
 }

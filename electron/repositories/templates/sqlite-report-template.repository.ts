@@ -10,6 +10,9 @@ import {
   ReportTemplateRepositoryError,
   type ReportTemplateRepository,
 } from './report-template.repository'
+import { getLogger } from '../../infrastructure/logging/logger.runtime'
+
+const logger = getLogger('SqliteReportTemplateRepository')
 
 interface ReportTemplateRow {
   id: string
@@ -93,9 +96,11 @@ export class SqliteReportTemplateRepository implements ReportTemplateRepository 
     this.database = new DatabaseSync(databasePath)
     this.database.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;')
     runMigrations(this.database, DATABASE_MIGRATIONS)
+    logger.info('Template database initialized')
   }
 
   async create(template: ReportTemplate): Promise<ReportTemplate> {
+    logger.debug('Repository create', { templateId: template.metadata.id })
     validateTemplate(template)
     try {
       this.database
@@ -123,13 +128,16 @@ export class SqliteReportTemplateRepository implements ReportTemplateRepository 
   }
 
   async getById(id: string): Promise<ReportTemplate | null> {
+    logger.debug('Repository getById', { templateId: id })
     const row = this.database
       .prepare('SELECT * FROM report_templates WHERE id = ?')
       .get(id) as unknown as ReportTemplateRow | undefined
+    if (!row) logger.warn('Repository entity not found', { templateId: id })
     return row ? templateFromRow(row) : null
   }
 
   async getAll(): Promise<ReportTemplate[]> {
+    logger.debug('Repository getAll')
     const rows = this.database
       .prepare('SELECT * FROM report_templates ORDER BY created_at, id')
       .all() as unknown as ReportTemplateRow[]
@@ -137,6 +145,7 @@ export class SqliteReportTemplateRepository implements ReportTemplateRepository 
   }
 
   async update(template: ReportTemplate): Promise<ReportTemplate> {
+    logger.debug('Repository update', { templateId: template.metadata.id })
     validateTemplate(template)
     const result = this.database
       .prepare(
@@ -174,6 +183,7 @@ export class SqliteReportTemplateRepository implements ReportTemplateRepository 
   }
 
   async delete(id: string): Promise<void> {
+    logger.debug('Repository delete', { templateId: id })
     this.database.prepare('DELETE FROM report_templates WHERE id = ?').run(id)
   }
 

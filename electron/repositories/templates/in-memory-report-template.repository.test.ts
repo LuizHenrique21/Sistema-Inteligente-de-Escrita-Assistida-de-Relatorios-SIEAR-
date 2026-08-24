@@ -340,7 +340,9 @@ describe('InMemoryReportTemplateRepository', () => {
       message: expect.stringContaining(String(REPORT_TEMPLATE_VERSION)),
     })
     await expect(
-      repository.create({ id: 'obsolete-template' } as unknown as ReportTemplate),
+      repository.create({
+        id: 'obsolete-template',
+      } as unknown as ReportTemplate),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
   })
 

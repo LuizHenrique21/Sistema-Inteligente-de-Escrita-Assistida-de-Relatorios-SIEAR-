@@ -1,6 +1,8 @@
 import type { StructurePattern } from '../../../../src/domain/templates/structure-pattern'
 import type { DocumentRepresentation } from '../../documents/types'
 
+export const WRITING_ANALYSIS_PROMPT_VERSION = '1' as const
+
 export interface WritingSectionSample {
   name: string
   level: number
@@ -40,15 +42,49 @@ function representativeSamples(value: string): string[] {
   )
 }
 
+function normalizedName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function matchesSection(
+  sourceName: string,
+  patternName: string,
+  repeatable: boolean,
+): boolean {
+  const source = normalizedName(sourceName)
+  const pattern = normalizedName(patternName)
+  return (
+    source === pattern ||
+    (repeatable &&
+      (source.startsWith(`${pattern} `) || pattern.startsWith(`${source} `)))
+  )
+}
+
 export function buildWritingAnalysisInput(
   document: DocumentRepresentation,
   structure: StructurePattern,
 ): WritingAnalysisInput {
-  const sections = structure.sections.map((pattern) => {
-    const source = document.sections.find(
-      (section) => section.title === pattern.name,
+  const uniquePatterns = new Map(
+    structure.sections.map((section) => [
+      normalizedName(section.name),
+      section,
+    ]),
+  )
+  const sections = [...uniquePatterns.values()].map((pattern) => {
+    const sources = document.sections.filter((section) =>
+      matchesSection(section.title, pattern.name, pattern.repeatable),
     )
-    const samples = representativeSamples(source?.content ?? '')
+    const samples = representativeSamples(
+      sources
+        .map((source) => source.content)
+        .filter(Boolean)
+        .join('\n'),
+    )
     return {
       name: pattern.name,
       level: pattern.level,
@@ -83,7 +119,9 @@ Analise COMO o autor escreve, não resuma O QUE aconteceu. Extraia regras lingu�
 Use exclusivamente as amostras e a estrutura fornecidas. Não copie frases completas como regras.
 Nomes, pessoas, datas, empresas, equipamentos, códigos e fatos particulares são dados do exemplo e jamais regras permanentes.
 Não invente evidências. Toda evidência deve ser um trecho literal contido em uma das amostras e ter a seção correta.
-Crie estilos somente para seções presentes na entrada. Quando a evidência for insuficiente, descreva a limitação na justificativa e use arrays vazios.
+Crie sectionStyles para exatamente todas as seções da entrada que possuem samples não vazios, uma única vez por nome. Não crie sectionStyle para seção sem samples. Quando a evidência for insuficiente para uma regra, use o array de regras vazio.
+Retorne sectionStyles exatamente na mesma ordem em que as seções aparecem na entrada.
+Copie sectionName exatamente da entrada. Seja conciso: use no máximo 3 evidências por perfil ou regra, 3 padrões de cada tipo por seção e 8 regras em cada lista global.
 Retorne exclusivamente JSON válido, sem Markdown.
 
 Todos os perfis de estilo devem conter:

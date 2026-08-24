@@ -8,6 +8,129 @@ afterEach(() => {
 })
 
 describe('OllamaService', () => {
+  it('publica métricas de tokens quando o Ollama as fornece', async () => {
+    const onMetrics = vi.fn()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            message: { content: '{}' },
+            prompt_eval_count: 120,
+            eval_count: 30,
+            prompt_eval_duration: 2_000_000_000,
+            eval_duration: 3_000_000_000,
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
+
+    await new OllamaService({ onMetrics }).generateJson('Prompt')
+
+    expect(onMetrics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptBytes: 6,
+        responseBytes: 2,
+        promptCharacters: 6,
+        responseCharacters: 2,
+        promptTokens: 120,
+        generatedTokens: 30,
+        promptEvaluationMs: 2000,
+        generationMs: 3000,
+        tokensPerSecond: 10,
+      }),
+    )
+  })
+
+  it('publica null quando o Ollama não fornece métricas opcionais', async () => {
+    const onMetrics = vi.fn()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ message: { content: '{}' } }), {
+          status: 200,
+        }),
+      ),
+    )
+
+    await new OllamaService({ onMetrics }).generateJson('Prompt')
+
+    expect(onMetrics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptTokens: null,
+        generatedTokens: null,
+        promptEvaluationMs: null,
+        generationMs: null,
+        tokensPerSecond: null,
+      }),
+    )
+  })
+
+  it('não inclui prompt nem resposta nas métricas publicadas', async () => {
+    const onMetrics = vi.fn()
+    const sensitivePrompt = 'SEGREDO-NO-PROMPT'
+    const sensitiveResponse = 'SEGREDO-NA-RESPOSTA'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ message: { content: sensitiveResponse } }),
+          { status: 200 },
+        ),
+      ),
+    )
+
+    await new OllamaService({ onMetrics }).generateJson(sensitivePrompt)
+
+    const published = JSON.stringify(onMetrics.mock.calls[0]?.[0])
+    expect(published).not.toContain(sensitivePrompt)
+    expect(published).not.toContain(sensitiveResponse)
+    expect(onMetrics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptBytes: Buffer.byteLength(sensitivePrompt),
+        responseBytes: Buffer.byteLength(sensitiveResponse),
+      }),
+    )
+  })
+
+  it('não deixa uma falha do observador alterar a resposta funcional', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ message: { content: '{}' } }), {
+          status: 200,
+        }),
+      ),
+    )
+    const serviceWithFailingObserver = new OllamaService({
+      onMetrics: () => {
+        throw new Error('falha exclusiva da instrumentação')
+      },
+    })
+
+    await expect(
+      serviceWithFailingObserver.generateJson('Prompt'),
+    ).resolves.toBe('{}')
+  })
+
+  it('permite configurar o timeout para análises locais longas', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ message: { content: '{}' } }), {
+          status: 200,
+        }),
+      ),
+    )
+
+    await new OllamaService({ timeoutMs: 456_000 }).generateJson('Prompt')
+
+    expect(timeout).toHaveBeenCalledWith(456_000)
+    timeout.mockRestore()
+  })
+
   it('envia o contrato esperado e retorna o conteúdo gerado', async () => {
     const fetchMock = vi
       .fn()

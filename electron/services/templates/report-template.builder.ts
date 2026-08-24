@@ -12,6 +12,8 @@ import {
 } from '../../../src/domain/templates/report-template'
 import type { DocumentRepresentation } from '../documents/types'
 
+export const REPORT_TEMPLATE_BUILDER_VERSION = '1' as const
+
 export interface ReportTemplateBuilderInput {
   document: DocumentRepresentation
   structure: StructurePattern

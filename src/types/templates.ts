@@ -16,9 +16,7 @@ export interface TemplatesApi {
   ): () => void
   getAll(): Promise<TemplatesResult<ReportTemplate[]>>
   getById(id: string): Promise<TemplatesResult<ReportTemplate | null>>
-  update(
-    template: ReportTemplate,
-  ): Promise<TemplatesResult<ReportTemplate>>
+  update(template: ReportTemplate): Promise<TemplatesResult<ReportTemplate>>
   confirm(id: string): Promise<TemplatesResult<ReportTemplate>>
   delete(id: string): Promise<TemplatesResult<null>>
 }

@@ -12,6 +12,8 @@ import { createAiGenerateHandler } from './ai.handler'
 import { createReportExtractionHandler } from './report-extraction.handler'
 import { createReportGenerationHandler } from './report-generation.handler'
 import { createReportExportHandler } from './report-export.handler'
+import { getLogger } from '../infrastructure/logging/logger.runtime'
+import { withIpcLogging } from '../infrastructure/logging/ipc-logging'
 
 const ollamaService = new OllamaService()
 const generate = createAiGenerateHandler(ollamaService)
@@ -25,6 +27,7 @@ const reportGenerationPipeline = new ReportGenerationPipeline(
   new ReportGenerationService(ollamaService),
 )
 export function registerAiIpc(templates: ReportTemplateService): void {
+  const ipcLogger = getLogger('AiIpc')
   const generateReport = createReportGenerationHandler(
     reportGenerationPipeline,
     templates,
@@ -53,14 +56,34 @@ export function registerAiIpc(templates: ReportTemplateService): void {
     },
     { write: (filePath, content) => writeFile(filePath, content) },
   )
-  ipcMain.handle('ai:generate', (_event, request: unknown) => generate(request))
-  ipcMain.handle('ai:extract-report-information', (_event, request: unknown) =>
-    extractReportInformation(request),
+  ipcMain.handle(
+    'ai:generate',
+    withIpcLogging('ai:generate', ipcLogger, (_event, request: unknown) =>
+      generate(request),
+    ),
   )
-  ipcMain.handle('ai:generate-report', (_event, request: unknown) =>
-    generateReport(request),
+  ipcMain.handle(
+    'ai:extract-report-information',
+    withIpcLogging(
+      'ai:extract-report-information',
+      ipcLogger,
+      (_event, request: unknown) => extractReportInformation(request),
+    ),
   )
-  ipcMain.handle('reports:export-docx', (_event, request: unknown) =>
-    exportReport(request),
+  ipcMain.handle(
+    'ai:generate-report',
+    withIpcLogging(
+      'ai:generate-report',
+      ipcLogger,
+      (_event, request: unknown) => generateReport(request),
+    ),
+  )
+  ipcMain.handle(
+    'reports:export-docx',
+    withIpcLogging(
+      'reports:export-docx',
+      ipcLogger,
+      (_event, request: unknown) => exportReport(request),
+    ),
   )
 }

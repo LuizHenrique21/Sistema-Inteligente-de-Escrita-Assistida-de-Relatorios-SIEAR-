@@ -10,6 +10,9 @@ import type {
   ParagraphFormatting,
 } from '../../../src/domain/templates/formatting-pattern'
 import type { ReportTemplate } from '../../../src/domain/templates/report-template'
+import { getLogger } from '../../infrastructure/logging/logger.runtime'
+
+const logger = getLogger('DocumentRenderer')
 
 /** Limitações decorrentes de dados que o contrato aprendido ainda não fornece. */
 export const DOCUMENT_RENDERER_LIMITATIONS = [
@@ -199,6 +202,10 @@ export class DocumentRenderer {
     report: GeneratedReport,
     template: ReportTemplate,
   ): Promise<Buffer> {
+    const timer = logger.startTimer('Document render', {
+      templateId: template.metadata.id,
+      sections: report.sections.length,
+    })
     const pattern = template.formattingPattern
     const zip = new JSZip()
     const imageFiles: Array<{
@@ -409,7 +416,21 @@ export class DocumentRenderer {
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>${xml(report.templateName)}</dc:title><dc:creator>SIEAR</dc:creator></cp:coreProperties>`,
     )
     zip.file('[Content_Types].xml', this.contentTypes(pattern, imageFiles))
-    return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
+    const output = await zip.generateAsync({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+    })
+    const elements = report.sections.flatMap(
+      (section) => section.elements ?? [],
+    )
+    timer.end('Document render completed', {
+      outputBytes: output.byteLength,
+      paragraphs: elements.filter((element) => element.type === 'paragraph')
+        .length,
+      tables: elements.filter((element) => element.type === 'table').length,
+      figures: imageFiles.length,
+    })
+    return output
   }
 
   private stylesXml(pattern: FormattingPattern): string {

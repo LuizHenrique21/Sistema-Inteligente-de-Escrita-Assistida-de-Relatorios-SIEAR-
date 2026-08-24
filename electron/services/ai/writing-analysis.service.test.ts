@@ -195,6 +195,71 @@ describe('WritingAnalysisService', () => {
     expect(JSON.stringify(input)).not.toContain('pessoa@empresa.com')
   })
 
+  it('consolida ocorrências repetidas da mesma seção', () => {
+    const source = structuredClone(document)
+    source.sections = [
+      {
+        ...source.sections[0]!,
+        title: 'Atividade 1',
+        content: 'Primeiro procedimento executado.',
+      },
+      {
+        ...source.sections[0]!,
+        id: 'activity-2',
+        title: 'Atividade 2',
+        content: 'Segundo procedimento executado.',
+      },
+    ]
+    const repeatedStructure: StructurePattern = {
+      ...structure,
+      sections: [
+        {
+          ...structure.sections[0]!,
+          name: 'Atividade',
+          repeatable: true,
+        },
+      ],
+    }
+    const input = buildWritingAnalysisInput(source, repeatedStructure)
+    expect(input.sections).toHaveLength(1)
+    expect(input.sections[0]?.samples).toEqual([
+      'Primeiro procedimento executado.',
+      'Segundo procedimento executado.',
+    ])
+  })
+
+  it('aceita variações inofensivas de espaços e caixa sem aceitar outro texto', async () => {
+    const pattern = validPattern()
+    pattern.sectionStyles[0]!.sectionName = 'descrição'
+    pattern.sectionStyles[0]!.evidence[0]!.sectionName = 'descrição'
+    pattern.sectionStyles[0]!.evidence[0]!.excerpt =
+      'O procedimento foi executado   conforme a especificação técnica.'
+    const generator = {
+      generateJson: vi.fn().mockResolvedValue(JSON.stringify(pattern)),
+    }
+    const result = await new WritingAnalysisService(generator).analyze(
+      document,
+      structure,
+    )
+    expect(result.sectionStyles).toContainEqual(
+      expect.objectContaining({ sectionName: 'descrição' }),
+    )
+  })
+
+  it('associa nomes reais quando o modelo omite a numeração da seção', async () => {
+    const numberedStructure = structuredClone(structure)
+    numberedStructure.sections[0]!.name = '1. Descrição'
+    const source = structuredClone(document)
+    source.sections[0]!.title = '1. Descrição'
+    const pattern = validPattern()
+
+    const result = await new WritingAnalysisService({
+      generateJson: vi.fn().mockResolvedValue(JSON.stringify(pattern)),
+    }).analyze(source, numberedStructure)
+
+    expect(result.sectionStyles[0]?.sectionName).toBe('Descrição')
+  })
+
   it('rejeita JSON inválido, contrato incompleto e seção inventada', async () => {
     await expect(
       new WritingAnalysisService({

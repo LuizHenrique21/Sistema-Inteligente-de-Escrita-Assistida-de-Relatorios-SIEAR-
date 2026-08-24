@@ -5,6 +5,8 @@ import type {
 import type { DocumentRepresentation } from '../../documents/types'
 import { buildWritingAnalysisInput } from './writing-analysis.prompt'
 
+export const SEMANTIC_ANALYSIS_PROMPT_VERSION = '1' as const
+
 export interface SemanticAnalysisInput {
   documentType: string
   sections: Array<{

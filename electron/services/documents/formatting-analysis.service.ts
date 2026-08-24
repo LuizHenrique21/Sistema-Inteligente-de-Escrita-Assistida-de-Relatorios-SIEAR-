@@ -7,6 +7,11 @@ import type {
   ParagraphStyle,
   TableStyle,
 } from '../../../src/domain/templates/formatting-pattern'
+import { getLogger } from '../../infrastructure/logging/logger.runtime'
+
+const logger = getLogger('FormattingAnalysisService')
+export const FORMATTING_ANALYZER_VERSION = '1' as const
+export const FORMATTING_PATTERN_STAGE_VERSION = '1' as const
 import type {
   DocumentRepresentation,
   DocumentStyle as SourceDocumentStyle,
@@ -113,6 +118,10 @@ function paragraphWeight(paragraph: ExtractedParagraph): number {
 
 export class FormattingAnalysisService {
   analyze(document: DocumentRepresentation): FormattingPattern {
+    const timer = logger.startTimer('Formatting analysis')
+    logger.info('Formatting analysis started', {
+      paragraphs: document.paragraphs.length,
+    })
     const resolved = new Map(
       document.paragraphs.map((paragraph) => [
         paragraph.id,
@@ -277,7 +286,7 @@ export class FormattingAnalysisService {
       }
     })
 
-    return {
+    const result: FormattingPattern = {
       documentStyle: {
         predominantFont: predominant(fontValues),
         predominantFontSizePt: predominant(sizeValues),
@@ -316,5 +325,15 @@ export class FormattingAnalysisService {
       })),
       sourceStyleIds: [...new Set(document.styles.map((style) => style.id))],
     }
+    timer.end('Formatting analysis completed', {
+      headingStyles: result.headingStyles.length,
+      paragraphStyles: result.paragraphStyles.length,
+      lists: result.listStyles.length,
+      tables: result.tableStyles.length,
+      figures: result.figureStyles.length,
+      headers: result.headerStyles.length,
+      footers: result.footerStyles.length,
+    })
+    return result
   }
 }
