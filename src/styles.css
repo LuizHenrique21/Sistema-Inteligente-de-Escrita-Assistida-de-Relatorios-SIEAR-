@@ -595,3 +595,132 @@ pre {
 .import-progress span {
   grid-column: 1 / -1;
 }
+
+.templates-page {
+  width: min(1380px, 100%);
+}
+.templates-page .templates-workspace {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+.template-status.draft {
+  color: #7a4b00;
+  background: #fff1c7;
+}
+.template-status.confirmed {
+  color: #175c38;
+  background: #dff3e7;
+}
+.template-item.active .template-status {
+  color: inherit;
+  background: rgba(255, 255, 255, 0.16);
+}
+.template-progress {
+  margin-bottom: 24px;
+  padding: 18px;
+  border: 1px solid #c9ddd0;
+  border-radius: 14px;
+  background: #f4faf6;
+}
+.template-progress ol {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 7px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.template-progress li {
+  padding: 8px 5px;
+  border-radius: 8px;
+  color: #718078;
+  background: #e8eeea;
+  font-size: 0.72rem;
+  text-align: center;
+}
+.template-progress li.completed {
+  color: #245c43;
+  background: #dceee3;
+}
+.template-progress li.active {
+  color: white;
+  background: #245c43;
+  font-weight: 700;
+}
+.template-metadata-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.template-metadata-header .badge + .badge {
+  margin-left: 7px;
+}
+.template-metadata-header small {
+  color: #718078;
+  overflow-wrap: anywhere;
+}
+.template-lifecycle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid #dce7e0;
+}
+.template-lifecycle div {
+  display: grid;
+  gap: 3px;
+}
+.template-review {
+  display: grid;
+  gap: 18px;
+  margin-top: 26px;
+}
+.template-review > section {
+  padding: 18px;
+  border: 1px solid #dce7e0;
+  border-radius: 14px;
+  background: #fbfdfc;
+}
+.template-review h4 {
+  margin: 0 0 12px;
+  color: #214d39;
+}
+.template-pattern-section {
+  margin: 8px 0 0;
+}
+.template-object-grid {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+.template-object-grid > div {
+  padding: 10px;
+  border-left: 2px solid #c4dbcc;
+  background: #f2f7f4;
+}
+.template-object-grid dt {
+  margin-bottom: 4px;
+  color: #527063;
+  font-family: ui-monospace, monospace;
+  font-size: 0.76rem;
+}
+.template-object-grid dd {
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+.template-rich-list {
+  margin: 7px 0;
+  padding-left: 20px;
+}
+.template-rich-list > li + li {
+  margin-top: 8px;
+}
+@media (max-width: 900px) {
+  .template-progress ol {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .templates-page .templates-workspace {
+    grid-template-columns: 1fr;
+  }
+}

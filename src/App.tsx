@@ -6,7 +6,7 @@ import type {
   GeneratedReport,
   MissingRequiredInformation,
 } from './types/generated-report'
-import type { ReportTemplate } from './types/report-template'
+import type { ReportTemplate } from './domain/templates/report-template'
 import type { AppInfo, ReportInformation } from './types/siear-api'
 
 const EXAMPLE_DESCRIPTION =
@@ -31,32 +31,23 @@ function App() {
     MissingRequiredInformation[]
   >([])
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportMessage, setExportMessage] = useState('')
   const [activePage, setActivePage] = useState<'extract' | 'templates'>(
     'extract',
   )
   const [templates, setTemplates] = useState<ReportTemplate[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const selectedTemplate = templates.find(
-    (template) => template.id === selectedTemplateId,
+    (template) => template.metadata.id === selectedTemplateId,
   )
-
-  async function loadTemplates(): Promise<void> {
-    const result = await templatesService.getAll()
-    if (!result.success) return
-    setTemplates(result.data)
-    setSelectedTemplateId((current) =>
-      result.data.some((template) => template.id === current)
-        ? current
-        : (result.data[0]?.id ?? ''),
-    )
-  }
 
   useEffect(() => {
     let isActive = true
     void templatesService.getAll().then((result) => {
       if (!isActive || !result.success) return
       setTemplates(result.data)
-      setSelectedTemplateId(result.data[0]?.id ?? '')
+      setSelectedTemplateId(result.data[0]?.metadata.id ?? '')
     })
     return () => {
       isActive = false
@@ -112,6 +103,7 @@ function App() {
     setIsGenerating(true)
     setGenerationError('')
     setGeneratedReport(null)
+    setExportMessage('')
     setMissingInformation([])
 
     try {
@@ -127,6 +119,26 @@ function App() {
       setGenerationError('Não foi possível comunicar com o processo principal.')
     } finally {
       setIsGenerating(false)
+    }
+  }
+
+  async function exportReport(): Promise<void> {
+    if (!generatedReport || isExporting) return
+    setIsExporting(true)
+    setExportMessage('')
+    try {
+      const result = await aiService.exportReportDocx({
+        report: generatedReport,
+      })
+      setExportMessage(
+        result.success
+          ? `Relatório exportado para ${result.filePath}`
+          : result.error.message,
+      )
+    } catch {
+      setExportMessage('Não foi possível comunicar com o processo principal.')
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -205,18 +217,19 @@ function App() {
               }}
             >
               {templates.map((template) => (
-                <option value={template.id} key={template.id}>
-                  {template.name}
+                <option value={template.metadata.id} key={template.metadata.id}>
+                  {template.metadata.name}
                 </option>
               ))}
             </select>
             {selectedTemplate && (
               <div className="selected-template-summary">
-                <strong>{selectedTemplate.name}</strong>
-                <span>{selectedTemplate.description}</span>
+                <strong>{selectedTemplate.metadata.name}</strong>
+                <span>{selectedTemplate.metadata.description}</span>
                 <span>
-                  {selectedTemplate.sections.length} seções · formalidade{' '}
-                  {selectedTemplate.formality}
+                  {selectedTemplate.structurePattern.sections.length} seções ·
+                  formalidade{' '}
+                  {selectedTemplate.writingPattern.globalStyle.formality}
                 </span>
               </div>
             )}
@@ -351,17 +364,20 @@ function App() {
                       <p>{section.content}</p>
                     </section>
                   ))}
+                <button
+                  type="button"
+                  onClick={exportReport}
+                  disabled={isExporting}
+                >
+                  {isExporting ? 'Exportando...' : 'Exportar DOCX'}
+                </button>
+                {exportMessage && <p role="status">{exportMessage}</p>}
               </article>
             )}
           </section>
         </div>
       ) : (
-        <ReportTemplatesPage
-          templates={templates}
-          selectedId={selectedTemplateId}
-          onSelect={setSelectedTemplateId}
-          onChanged={loadTemplates}
-        />
+        <ReportTemplatesPage />
       )}
     </main>
   )

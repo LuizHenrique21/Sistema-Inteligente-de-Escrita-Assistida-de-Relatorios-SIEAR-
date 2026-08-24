@@ -1,18 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ReportTemplate } from '../../../src/types/report-template'
-import type { FormattingPattern } from '../documents/formatting-analysis.types'
-import type { SemanticPattern } from '../documents/semantic-analysis.types'
-import type { StructurePattern } from '../documents/structure-analysis.types'
+import {
+  REPORT_TEMPLATE_VERSION,
+  type ReportTemplate,
+} from '../../../src/domain/templates/report-template'
+import type {
+  FormattingPattern,
+  SemanticPattern,
+  StructurePattern,
+  WritingPattern,
+} from '../../../src/domain/templates'
 import type {
   DocumentRepresentation,
   ParagraphFormatting,
 } from '../documents/types'
-import type { WritingPattern } from '../documents/writing-analysis.types'
 import { ReportTemplateBuilder } from './report-template.builder'
-import {
-  REPORT_TEMPLATE_V2_VERSION,
-  type ReportTemplateV2,
-} from './report-template-v2.types'
 import { TemplateCreationPipeline } from './template-creation.pipeline'
 
 const document = { fileName: 'modelo.docx' } as DocumentRepresentation
@@ -22,38 +23,12 @@ const semantic = { documentType: 'Relatório' } as SemanticPattern
 const formatting = { documentStyle: {} } as FormattingPattern
 
 function template(id: string): ReportTemplate {
-  return {
-    id,
-    name: 'Modelo',
-    description: 'Modelo aprendido.',
-    objective: 'Registrar atividades.',
-    tone: 'formal',
-    style: 'técnico',
-    formality: 'high',
-    sections: [
-      {
-        id: 'section',
-        name: 'Descrição',
-        description: 'Descrever.',
-        required: true,
-        order: 1,
-      },
-    ],
-    fields: [],
-    writingRules: [],
-    recommendedVocabulary: [],
-    forbiddenExpressions: [],
-    status: 'draft',
-  }
-}
-
-function templateV2(id: string): ReportTemplateV2 {
   const timestamp = '2026-08-21T00:00:00.000Z'
   return {
-    version: REPORT_TEMPLATE_V2_VERSION,
+    version: REPORT_TEMPLATE_VERSION,
     metadata: {
       id,
-      name: 'Modelo V2',
+      name: 'Modelo',
       description: 'Modelo aprendido.',
       documentType: 'Relatório',
       status: 'draft',
@@ -112,7 +87,6 @@ describe('TemplateCreationPipeline', () => {
         calls.push('builder')
         return template('template-1')
       }),
-      buildV2: vi.fn(() => templateV2('template-v2-1')),
     }
     const progress: Array<{ step: number; message: string }> = []
     const result = await new TemplateCreationPipeline(
@@ -124,7 +98,7 @@ describe('TemplateCreationPipeline', () => {
       builder,
     ).execute('C:\\documentos\\modelo.docx', (item) => progress.push(item))
 
-    expect(result.id).toBe('template-1')
+    expect(result.metadata.id).toBe('template-1')
     expect(calls).toEqual([
       'extract',
       'structure',
@@ -167,7 +141,7 @@ describe('TemplateCreationPipeline', () => {
       { analyze: vi.fn() },
       { analyze: vi.fn() },
       { analyze: vi.fn() },
-      { build: vi.fn(), buildV2: vi.fn() },
+      { build: vi.fn() },
     )
     await expect(
       pipeline.execute('invalido.docx', (item) => progress.push(item.step)),
@@ -179,7 +153,6 @@ describe('TemplateCreationPipeline', () => {
     let sequence = 0
     const builder = {
       build: vi.fn(() => template(`template-${++sequence}`)),
-      buildV2: vi.fn(() => templateV2(`template-v2-${sequence}`)),
     }
     const pipeline = new TemplateCreationPipeline(
       { extract: vi.fn().mockResolvedValue(document) },
@@ -191,11 +164,11 @@ describe('TemplateCreationPipeline', () => {
     )
     const first = await pipeline.execute('primeiro.docx')
     const second = await pipeline.execute('segundo.docx')
-    expect(first.id).not.toBe(second.id)
+    expect(first.metadata.id).not.toBe(second.metadata.id)
     expect(builder.build).toHaveBeenCalledTimes(2)
   })
 
-  it('preserva análises ricas no fluxo V2 sem achatamento', async () => {
+  it('preserva análises ricas no fluxo oficial sem achatamento', async () => {
     const fieldEvidence = {
       source: 'paragraph' as const,
       elementId: 'paragraph-responsavel',
@@ -437,7 +410,7 @@ describe('TemplateCreationPipeline', () => {
       sourceStyleIds: ['Normal', 'Heading2'],
     }
     const builder = new ReportTemplateBuilder()
-    const buildV2 = vi.spyOn(builder, 'buildV2')
+    const build = vi.spyOn(builder, 'build')
     const structureAnalyzer = {
       analyze: vi.fn().mockResolvedValue(richStructure),
     }
@@ -460,7 +433,7 @@ describe('TemplateCreationPipeline', () => {
     )
     const progress: number[] = []
 
-    const result = await pipeline.executeV2('modelo.docx', (item) =>
+    const result = await pipeline.execute('modelo.docx', (item) =>
       progress.push(item.step),
     )
 
@@ -475,7 +448,7 @@ describe('TemplateCreationPipeline', () => {
       richWriting,
     )
     expect(formattingAnalyzer.analyze).toHaveBeenCalledWith(document)
-    expect(buildV2).toHaveBeenCalledWith({
+    expect(build).toHaveBeenCalledWith({
       document,
       structure: richStructure,
       writing: richWriting,
@@ -483,7 +456,7 @@ describe('TemplateCreationPipeline', () => {
       formatting: richFormatting,
     })
     expect(progress).toEqual([1, 2, 3, 4, 5, 6, 7])
-    expect(result.version).toBe(REPORT_TEMPLATE_V2_VERSION)
+    expect(result.version).toBe(REPORT_TEMPLATE_VERSION)
     expect(result.metadata.status).toBe('draft')
     expect(result.structurePattern.hierarchy[0]?.children[0]?.name).toBe(
       'Execução',

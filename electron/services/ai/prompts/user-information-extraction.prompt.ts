@@ -1,22 +1,25 @@
-import type { ReportTemplate } from '../../../../src/types/report-template'
+import type { ReportTemplate } from '../../../../src/domain/templates/report-template'
 
 export function buildUserInformationExtractionPrompt(
   text: string,
   template: ReportTemplate,
 ): string {
   const relevantTemplate = {
-    documentType: template.documentType ?? template.name,
+    documentType: template.metadata.documentType,
     fields: template.fields.map((field) => ({
       name: field.name,
       label: field.label,
       type: field.type,
-      description: field.description,
+      required: field.required,
     })),
-    sections: template.sections.map((section) => ({
-      name: section.name,
-      semanticPurpose: section.semanticPurpose ?? section.description,
+    sections: template.semanticPattern.sections.map((section) => ({
+      name: section.sectionName,
+      semanticPurpose: section.purpose,
+      expectedInformation: section.expectedInformation,
+      excludedInformation: section.excludedInformation,
     })),
-    semanticRules: template.semanticRules ?? [],
+    semanticFields: template.semanticPattern.fields,
+    activityPatterns: template.activityPatterns,
   }
   return `Você é o UserInformationExtractor do SIEAR.
 
@@ -31,7 +34,7 @@ Formato obrigatório:
 {"facts":[{"name":"string","label":"string","value":"string","evidence":"trecho literal"}],"activities":[{"description":"string","procedures":["string"],"result":null,"problems":[],"evidence":["trecho literal"]}]}
 
 TEMPLATE RELEVANTE:
-${JSON.stringify(relevantTemplate, null, 2)}
+${JSON.stringify(relevantTemplate, (key, value) => (key === 'evidence' ? undefined : value), 2)}
 
 TEXTO DO USUÁRIO:
 ${JSON.stringify(text)}`

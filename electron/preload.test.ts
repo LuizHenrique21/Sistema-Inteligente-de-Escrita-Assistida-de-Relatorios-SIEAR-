@@ -17,7 +17,7 @@ vi.mock('electron', () => ({
   },
 }))
 
-describe('preload de templates V2', () => {
+describe('preload de templates', () => {
   let api: SiearApi
 
   beforeAll(async () => {
@@ -32,12 +32,12 @@ describe('preload de templates V2', () => {
     electronMocks.removeListener.mockClear()
   })
 
-  it('expõe a API V2 via contextBridge sem expor ipcRenderer', () => {
+  it('expõe a API oficial via contextBridge sem expor ipcRenderer', () => {
     expect(electronMocks.exposeInMainWorld).toHaveBeenCalledWith(
       'siear',
       expect.any(Object),
     )
-    expect(api.templatesV2).toEqual(
+    expect(api.templates).toEqual(
       expect.objectContaining({
         createFromDocument: expect.any(Function),
         onCreationProgress: expect.any(Function),
@@ -49,33 +49,41 @@ describe('preload de templates V2', () => {
       }),
     )
     expect(api).not.toHaveProperty('ipcRenderer')
-    expect(api.templatesV2).not.toHaveProperty('repository')
-    expect(api.templatesV2).not.toHaveProperty('service')
+    expect(api.templates).not.toHaveProperty('repository')
+    expect(api.templates).not.toHaveProperty('service')
+    expect(api.ai.exportReportDocx).toEqual(expect.any(Function))
   })
 
-  it('invoca somente os canais V2 esperados', async () => {
-    const request = { filePath: 'modelo.docx' }
-    await api.templatesV2.createFromDocument(request)
-    await api.templatesV2.getAll()
-    await api.templatesV2.getById('id')
-    await api.templatesV2.update({ version: 2 } as never)
-    await api.templatesV2.confirm('id')
-    await api.templatesV2.delete('id')
+  it('exporta DOCX somente pelo canal seguro do Main Process', async () => {
+    const report = { id: 'report' } as never
+    await api.ai.exportReportDocx({ report })
+    expect(electronMocks.invoke).toHaveBeenCalledWith('reports:export-docx', {
+      report,
+    })
+  })
+
+  it('invoca somente os canais oficiais esperados', async () => {
+    await api.templates.createFromDocument()
+    await api.templates.getAll()
+    await api.templates.getById('id')
+    await api.templates.update({ version: 2 } as never)
+    await api.templates.confirm('id')
+    await api.templates.delete('id')
     expect(electronMocks.invoke.mock.calls.map((call) => call[0])).toEqual([
-      'templates-v2:create-from-document',
-      'templates-v2:get-all',
-      'templates-v2:get-by-id',
-      'templates-v2:update',
-      'templates-v2:confirm',
-      'templates-v2:delete',
+      'templates:create-from-document',
+      'templates:get-all',
+      'templates:get-by-id',
+      'templates:update',
+      'templates:confirm',
+      'templates:delete',
     ])
   })
 
   it('encaminha somente eventos de progresso válidos e permite remover listener', () => {
     const callback = vi.fn()
-    const unsubscribe = api.templatesV2.onCreationProgress(callback)
+    const unsubscribe = api.templates.onCreationProgress(callback)
     expect(electronMocks.on).toHaveBeenCalledWith(
-      'templates-v2:creation-progress',
+      'templates:creation-progress',
       expect.any(Function),
     )
     const listener = electronMocks.on.mock.calls[0]?.[1] as (
@@ -95,7 +103,7 @@ describe('preload de templates V2', () => {
 
     unsubscribe()
     expect(electronMocks.removeListener).toHaveBeenCalledWith(
-      'templates-v2:creation-progress',
+      'templates:creation-progress',
       listener,
     )
   })

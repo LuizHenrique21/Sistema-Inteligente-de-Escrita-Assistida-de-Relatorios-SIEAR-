@@ -1,6 +1,8 @@
-import type { StructurePattern } from '../../documents/structure-analysis.types'
+import type {
+  StructurePattern,
+  WritingPattern,
+} from '../../../../src/domain/templates'
 import type { DocumentRepresentation } from '../../documents/types'
-import type { WritingPattern } from '../../documents/writing-analysis.types'
 import { buildWritingAnalysisInput } from './writing-analysis.prompt'
 
 export interface SemanticAnalysisInput {

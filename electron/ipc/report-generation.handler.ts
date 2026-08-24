@@ -2,8 +2,8 @@ import type {
   GenerateReportRequest,
   GenerateReportResult,
 } from '../../src/types/generated-report'
-import type { ReportTemplate } from '../../src/types/report-template'
-import { ReportGenerationServiceError } from '../services/ai/report-generation.service'
+import type { ReportTemplate } from '../../src/domain/templates/report-template'
+import { ReportGenerationServiceError } from '../services/ai/report-generation.error'
 import { UserInformationExtractionError } from '../services/ai/user-information-extractor'
 import { OllamaServiceError } from '../services/ollama/ollama.service'
 

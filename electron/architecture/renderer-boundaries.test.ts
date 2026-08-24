@@ -23,4 +23,25 @@ describe('limites do Renderer', () => {
       expect(source, file).not.toMatch(/(?:node:)?fs(?:\/promises)?['"]/)
     }
   })
+
+  it('mantém o domínio compartilhado independente de infraestrutura', () => {
+    for (const file of rendererFiles('src/domain')) {
+      const source = readFileSync(file, 'utf8')
+      expect(source, file).not.toMatch(/from ['"][^'"]*electron(?:[\\/]|['"])/)
+      expect(source, file).not.toMatch(/from ['"]node:/)
+      expect(source, file).not.toMatch(/ollama/i)
+      expect(source, file).not.toMatch(/filesystem|\bfs(?:\/promises)?['"]/i)
+      expect(source, file).not.toMatch(/repositories?[\\/]/i)
+      expect(source, file).not.toMatch(/services?[\\/]/i)
+    }
+  })
+
+  it('não permite dependências de src para electron', () => {
+    for (const file of rendererFiles('src')) {
+      const source = readFileSync(file, 'utf8')
+      expect(source, file).not.toMatch(
+        /from ['"][^'"]*(?:\.\.[\\/])+electron(?:[\\/]|['"])/,
+      )
+    }
+  })
 })

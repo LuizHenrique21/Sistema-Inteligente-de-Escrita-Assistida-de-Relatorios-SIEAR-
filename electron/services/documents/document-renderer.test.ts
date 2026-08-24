@@ -4,7 +4,8 @@ import path from 'node:path'
 import JSZip from 'jszip'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { GeneratedReport } from '../../../src/types/generated-report'
-import type { FormattingPattern } from './formatting-analysis.types'
+import type { FormattingPattern } from '../../../src/domain/templates/formatting-pattern'
+import { createRichReportTemplate } from '../../testing/report-template.fixture'
 import { DocumentRenderer } from './document-renderer'
 import { DocxExtractor } from './docx-extractor.service'
 import type { ParagraphFormatting } from './types'
@@ -192,6 +193,8 @@ const report: GeneratedReport = {
     },
   ],
 }
+const template = createRichReportTemplate('template')
+template.formattingPattern = pattern
 
 describe('DocumentRenderer', () => {
   let directory: string
@@ -203,7 +206,7 @@ describe('DocumentRenderer', () => {
   })
 
   it('gera um pacote DOCX válido sem alterar o conteúdo do relatório', async () => {
-    const buffer = await new DocumentRenderer().render(report, pattern)
+    const buffer = await new DocumentRenderer().render(report, template)
     const zip = await JSZip.loadAsync(buffer)
     expect(zip.file('word/document.xml')).not.toBeNull()
     expect(zip.file('word/styles.xml')).not.toBeNull()
@@ -218,7 +221,7 @@ describe('DocumentRenderer', () => {
 
   it('reproduz seções, hierarquia, estilos e elementos do padrão original', async () => {
     const file = path.join(directory, 'gerado.docx')
-    await writeFile(file, await new DocumentRenderer().render(report, pattern))
+    await writeFile(file, await new DocumentRenderer().render(report, template))
     const extracted = await new DocxExtractor().extract(file)
     expect(
       extracted.sections.map((section) => ({
@@ -280,7 +283,10 @@ describe('DocumentRenderer', () => {
       ],
     }
     const file = path.join(directory, 'texto-estruturado.docx')
-    await writeFile(file, await new DocumentRenderer().render(textual, pattern))
+    await writeFile(
+      file,
+      await new DocumentRenderer().render(textual, template),
+    )
     const extracted = await new DocxExtractor().extract(file)
     expect(extracted.lists[0]?.items.map((item) => item.text)).toEqual([
       'Item A',

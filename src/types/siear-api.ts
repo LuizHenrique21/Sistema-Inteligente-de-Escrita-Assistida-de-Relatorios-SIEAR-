@@ -1,10 +1,10 @@
 import type {
   GenerateReportRequest,
   GenerateReportResult,
+  ExportReportDocxRequest,
+  ExportReportDocxResult,
 } from './generated-report'
-import type { TemplatesApi } from './report-template'
-import type { DocumentsApi } from './template-import'
-import type { TemplatesV2Api } from './templates-v2'
+import type { TemplatesApi } from './templates'
 
 export interface AppInfo {
   name: string
@@ -82,8 +82,9 @@ export interface SiearApi {
     generateReport: (
       request: GenerateReportRequest,
     ) => Promise<GenerateReportResult>
+    exportReportDocx: (
+      request: ExportReportDocxRequest,
+    ) => Promise<ExportReportDocxResult>
   }
   templates: TemplatesApi
-  templatesV2: TemplatesV2Api
-  documents: DocumentsApi
 }

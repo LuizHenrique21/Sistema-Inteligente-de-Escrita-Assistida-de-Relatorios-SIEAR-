@@ -1,3 +1,17 @@
+import type {
+  ActivityPattern,
+  FormattingPattern,
+  ReportTemplateRequirements,
+  SectionPattern,
+  SectionRelationship,
+  SectionSemanticPattern,
+  SectionWritingStyle,
+  SemanticPattern,
+  StructureField,
+  StructurePattern,
+  WritingPattern,
+} from '../domain/templates'
+
 export interface GeneratedReportSection {
   id: string
   name: string
@@ -32,6 +46,25 @@ export interface GenerateReportRequest {
   templateId: string
 }
 
+export interface ExportReportDocxRequest {
+  report: GeneratedReport
+}
+
+export type ExportReportDocxErrorCode =
+  | 'INVALID_REQUEST'
+  | 'TEMPLATE_NOT_FOUND'
+  | 'CANCELED'
+  | 'RENDER_ERROR'
+  | 'WRITE_ERROR'
+  | 'UNEXPECTED_ERROR'
+
+export type ExportReportDocxResult =
+  | { success: true; filePath: string }
+  | {
+      success: false
+      error: { code: ExportReportDocxErrorCode; message: string }
+    }
+
 export interface StructuredFact {
   name: string
   label: string
@@ -59,17 +92,51 @@ export interface MissingRequiredInformation {
   question: string
 }
 
+export interface ReportGroundingPolicy {
+  sourceOfFacts: 'structured-activity-only'
+  templateIsNotFactSource: true
+  requireEvidence: true
+  prohibitUnsupportedFacts: true
+}
+
+export interface PlannedSectionFormatting {
+  headingStyles: FormattingPattern['headingStyles']
+  paragraphStyles: FormattingPattern['paragraphStyles']
+}
+
 export interface PlannedReportSection {
   sectionId: string
   sectionName: string
   order: number
+  level: number
+  parentSectionId: string | null
+  required: boolean
+  repeatable: boolean
+  purpose: string | null
+  structure: SectionPattern
+  writingStyle: SectionWritingStyle | null
+  semantics: SectionSemanticPattern | null
+  formatting: PlannedSectionFormatting
   factNames: string[]
   activityIndexes: number[]
+}
+
+export interface ReportGenerationTemplateContext {
+  structurePattern: StructurePattern
+  fields: StructureField[]
+  activityPatterns: ActivityPattern[]
+  requirements: ReportTemplateRequirements
+  writingPattern: WritingPattern
+  semanticPattern: SemanticPattern
+  crossSectionRelations: SectionRelationship[]
+  formattingPattern: FormattingPattern
 }
 
 export interface ReportGenerationPlan {
   sections: PlannedReportSection[]
   missing: MissingRequiredInformation[]
+  groundingPolicy: ReportGroundingPolicy
+  templateContext: ReportGenerationTemplateContext
 }
 
 export type ReportGenerationErrorCode =

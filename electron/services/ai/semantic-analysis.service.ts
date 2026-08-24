@@ -4,8 +4,6 @@ import {
   buildSemanticAnalysisPrompt,
 } from './prompts/semantic-analysis.prompt'
 import type { StructuredTextGenerator } from './report-extraction.service'
-import type { StructurePattern } from '../documents/structure-analysis.types'
-import type { DocumentRepresentation } from '../documents/types'
 import type {
   ActivitySemanticPattern,
   ExpectedInformation,
@@ -15,8 +13,10 @@ import type {
   SemanticFieldPattern,
   SemanticPattern,
   SemanticRule,
-} from '../documents/semantic-analysis.types'
-import type { WritingPattern } from '../documents/writing-analysis.types'
+  StructurePattern,
+  WritingPattern,
+} from '../../../src/domain/templates'
+import type { DocumentRepresentation } from '../documents/types'
 
 const ROOT_KEYS = [
   'documentType',

@@ -1,21 +1,11 @@
+import type { ParagraphFormatting } from '../../../src/domain/templates/formatting-pattern'
+
+export type {
+  ParagraphFormatting,
+  TextFormatting,
+} from '../../../src/domain/templates/formatting-pattern'
+
 export type DocumentFileType = 'docx' | 'txt'
-export interface TextFormatting {
-  fontFamily: string | null
-  fontSizePt: number | null
-  bold: boolean
-  italic: boolean
-  underline: boolean
-}
-export interface ParagraphFormatting extends TextFormatting {
-  alignment: string | null
-  lineSpacing: number | null
-  spaceBeforePt: number | null
-  spaceAfterPt: number | null
-  indentLeftPt: number | null
-  indentRightPt: number | null
-  firstLineIndentPt: number | null
-  styleId: string | null
-}
 export interface ExtractedSection {
   id: string
   title: string

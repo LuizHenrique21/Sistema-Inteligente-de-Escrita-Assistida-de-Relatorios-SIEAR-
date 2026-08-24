@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { StructurePattern } from '../documents/structure-analysis.types'
-import type { DocumentRepresentation } from '../documents/types'
 import type {
+  StructurePattern,
   WritingPattern,
   WritingStyleProfile,
-} from '../documents/writing-analysis.types'
+} from '../../../src/domain/templates'
+import type { DocumentRepresentation } from '../documents/types'
 import { buildWritingAnalysisInput } from './prompts/writing-analysis.prompt'
 import { WritingAnalysisService } from './writing-analysis.service'
 

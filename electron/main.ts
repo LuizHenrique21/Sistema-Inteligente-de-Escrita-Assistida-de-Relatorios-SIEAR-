@@ -4,8 +4,6 @@ import path from 'node:path'
 import { registerAiIpc } from './ipc/ai.ipc'
 import { registerAppIpc } from './ipc/app.ipc'
 import { registerTemplatesIpc } from './ipc/templates.ipc'
-import { registerDocumentsIpc } from './ipc/documents.ipc'
-import { registerTemplatesV2Ipc } from './ipc/templates-v2.ipc'
 
 const electronDirectory = path.dirname(fileURLToPath(import.meta.url))
 
@@ -35,10 +33,8 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerAppIpc()
-  registerAiIpc()
-  registerTemplatesIpc()
-  registerDocumentsIpc()
-  registerTemplatesV2Ipc()
+  const templates = registerTemplatesIpc()
+  registerAiIpc(templates.service)
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

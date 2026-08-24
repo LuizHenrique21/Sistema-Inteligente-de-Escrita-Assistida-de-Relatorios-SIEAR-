@@ -1,12 +1,13 @@
-import type { FormattingPattern } from '../documents/formatting-analysis.types'
-import type { SemanticPattern } from '../documents/semantic-analysis.types'
-import type { StructurePattern } from '../documents/structure-analysis.types'
+import type {
+  FormattingPattern,
+  SemanticPattern,
+  StructurePattern,
+  WritingPattern,
+} from '../../../src/domain/templates'
+import type { ReportTemplate } from '../../../src/domain/templates/report-template'
 import type { DocumentRepresentation } from '../documents/types'
-import type { WritingPattern } from '../documents/writing-analysis.types'
-import type { ReportTemplate } from '../../../src/types/report-template'
 import type { TemplateImportProgress } from '../../../src/types/template-import'
 import type { ReportTemplateBuilderInput } from './report-template.builder'
-import type { ReportTemplateV2 } from './report-template-v2.types'
 
 export interface PipelineDocumentExtractor {
   extract(filePath: string): Promise<DocumentRepresentation>
@@ -37,7 +38,6 @@ export interface PipelineFormattingAnalyzer {
 
 export interface PipelineTemplateBuilder {
   build(input: ReportTemplateBuilderInput): ReportTemplate
-  buildV2(input: ReportTemplateBuilderInput): ReportTemplateV2
 }
 
 export type TemplateCreationProgressListener = (
@@ -62,19 +62,6 @@ export class TemplateCreationPipeline {
 
     onProgress({ step: 6, message: 'Construindo modelo...' })
     const template = this.templateBuilder.build(analysis)
-
-    onProgress({ step: 7, message: 'Modelo pronto para revisão.' })
-    return template
-  }
-
-  async executeV2(
-    filePath: string,
-    onProgress: TemplateCreationProgressListener = () => undefined,
-  ): Promise<ReportTemplateV2> {
-    const analysis = await this.runAnalysis(filePath, onProgress)
-
-    onProgress({ step: 6, message: 'Construindo modelo...' })
-    const template = this.templateBuilder.buildV2(analysis)
 
     onProgress({ step: 7, message: 'Modelo pronto para revisão.' })
     return template
