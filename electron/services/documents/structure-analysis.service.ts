@@ -12,7 +12,7 @@ import type {
   StructureField,
   StructureFieldType,
   StructurePattern,
-} from './structure-analysis.types'
+} from '../../../src/domain/templates/structure-pattern'
 
 const FIELD_NAMES = new Map<string, string>([
   ['nome', 'nome'],

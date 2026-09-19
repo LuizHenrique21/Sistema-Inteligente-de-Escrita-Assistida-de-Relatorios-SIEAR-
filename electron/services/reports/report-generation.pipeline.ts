@@ -2,7 +2,7 @@ import type {
   GenerateReportResult,
   StructuredActivity,
 } from '../../../src/types/generated-report'
-import type { ReportTemplate } from '../../../src/types/report-template'
+import type { ReportTemplate } from '../../../src/domain/templates/report-template'
 import type {
   GeneratedReport,
   ReportGenerationPlan,
@@ -27,7 +27,7 @@ export interface PipelineReportWriter {
   ): Promise<GeneratedReport>
 }
 
-export class LearnedReportGenerationPipeline {
+export class ReportGenerationPipeline {
   constructor(
     private readonly extractor: PipelineInformationExtractor,
     private readonly planner: PipelineGenerationPlanner,

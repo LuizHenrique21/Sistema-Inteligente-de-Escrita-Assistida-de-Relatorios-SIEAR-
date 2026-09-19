@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { SemanticPattern } from '../documents/semantic-analysis.types'
-import type { StructurePattern } from '../documents/structure-analysis.types'
-import type { DocumentRepresentation } from '../documents/types'
 import type {
+  SemanticPattern,
+  StructurePattern,
   WritingPattern,
   WritingStyleProfile,
-} from '../documents/writing-analysis.types'
+} from '../../../src/domain/templates'
+import type { DocumentRepresentation } from '../documents/types'
 import { buildSemanticAnalysisInput } from './prompts/semantic-analysis.prompt'
 import { SemanticAnalysisService } from './semantic-analysis.service'
 

@@ -6,7 +6,7 @@ import type {
   ListStyle,
   ParagraphStyle,
   TableStyle,
-} from './formatting-analysis.types'
+} from '../../../src/domain/templates/formatting-pattern'
 import type {
   DocumentRepresentation,
   DocumentStyle as SourceDocumentStyle,

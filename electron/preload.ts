@@ -25,29 +25,25 @@ const siearApi: SiearApi = {
       ipcRenderer.invoke('ai:extract-report-information', request),
     generateReport: (request) =>
       ipcRenderer.invoke('ai:generate-report', request),
+    exportReportDocx: (request) =>
+      ipcRenderer.invoke('reports:export-docx', request),
   },
   templates: {
-    getAll: () => ipcRenderer.invoke('templates:get-all'),
-    getById: (id) => ipcRenderer.invoke('templates:get-by-id', id),
-    create: (template) => ipcRenderer.invoke('templates:create', template),
-    update: (id, template) =>
-      ipcRenderer.invoke('templates:update', id, template),
-    delete: (id) => ipcRenderer.invoke('templates:delete', id),
-  },
-  documents: {
-    selectAndAnalyzeTemplate: () =>
-      ipcRenderer.invoke('documents:select-and-analyze-template'),
-    onTemplateImportProgress: (callback) => {
+    createFromDocument: () =>
+      ipcRenderer.invoke('templates:create-from-document'),
+    onCreationProgress: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, value: unknown) => {
         if (isTemplateImportProgress(value)) callback(value)
       }
-      ipcRenderer.on('documents:template-import-progress', listener)
+      ipcRenderer.on('templates:creation-progress', listener)
       return () =>
-        ipcRenderer.removeListener(
-          'documents:template-import-progress',
-          listener,
-        )
+        ipcRenderer.removeListener('templates:creation-progress', listener)
     },
+    getAll: () => ipcRenderer.invoke('templates:get-all'),
+    getById: (id) => ipcRenderer.invoke('templates:get-by-id', id),
+    update: (template) => ipcRenderer.invoke('templates:update', template),
+    confirm: (id) => ipcRenderer.invoke('templates:confirm', id),
+    delete: (id) => ipcRenderer.invoke('templates:delete', id),
   },
 }
 

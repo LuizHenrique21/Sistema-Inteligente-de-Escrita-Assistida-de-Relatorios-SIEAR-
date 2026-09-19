@@ -3,7 +3,7 @@ import type {
   StructuredActivityItem,
   StructuredFact,
 } from '../../../src/types/generated-report'
-import type { ReportTemplate } from '../../../src/types/report-template'
+import type { ReportTemplate } from '../../../src/domain/templates/report-template'
 import { buildUserInformationExtractionPrompt } from './prompts/user-information-extraction.prompt'
 import type { StructuredTextGenerator } from './report-extraction.service'
 

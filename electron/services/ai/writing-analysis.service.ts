@@ -1,12 +1,12 @@
-import type { StructurePattern } from '../documents/structure-analysis.types'
-import type { DocumentRepresentation } from '../documents/types'
 import type {
   SectionWritingStyle,
+  StructurePattern,
   WritingEvidence,
   WritingPattern,
   WritingRule,
   WritingStyleProfile,
-} from '../documents/writing-analysis.types'
+} from '../../../src/domain/templates'
+import type { DocumentRepresentation } from '../documents/types'
 import type { StructuredTextGenerator } from './report-extraction.service'
 import {
   buildWritingAnalysisInput,

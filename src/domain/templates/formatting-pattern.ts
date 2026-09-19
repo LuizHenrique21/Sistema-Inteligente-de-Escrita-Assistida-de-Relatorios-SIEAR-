@@ -1,4 +1,21 @@
-import type { ParagraphFormatting } from './types'
+export interface TextFormatting {
+  fontFamily: string | null
+  fontSizePt: number | null
+  bold: boolean
+  italic: boolean
+  underline: boolean
+}
+
+export interface ParagraphFormatting extends TextFormatting {
+  alignment: string | null
+  lineSpacing: number | null
+  spaceBeforePt: number | null
+  spaceAfterPt: number | null
+  indentLeftPt: number | null
+  indentRightPt: number | null
+  firstLineIndentPt: number | null
+  styleId: string | null
+}
 
 export interface FormattingEvidence {
   elementIds: string[]
@@ -91,6 +108,13 @@ export interface FooterStyle {
   evidence: FormattingEvidence
 }
 
+/**
+ * Padrão visual atualmente aprendido pelo SIEAR.
+ *
+ * O contrato preserva a capacidade existente e, nesta versão, não descreve
+ * bordas/células mescladas em detalhe, posicionamento avançado de imagens,
+ * numeração multinível completa, temas nem field codes.
+ */
 export interface FormattingPattern {
   documentStyle: DocumentStyle
   headingStyles: HeadingStyle[]

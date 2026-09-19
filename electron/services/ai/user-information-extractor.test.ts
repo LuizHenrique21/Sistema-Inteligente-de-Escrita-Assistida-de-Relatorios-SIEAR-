@@ -1,14 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ReportTemplate } from '../../../src/types/report-template'
+import { createRichReportTemplate } from '../../testing/report-template.fixture'
 import { UserInformationExtractor } from './user-information-extractor'
 
-const template = {
-  name: 'Modelo',
-  documentType: 'Relatório',
-  fields: [],
-  sections: [],
-  semanticRules: [],
-} as unknown as ReportTemplate
+const template = createRichReportTemplate()
 
 describe('UserInformationExtractor', () => {
   it('interpreta fatos e atividades mantendo evidências literais', async () => {

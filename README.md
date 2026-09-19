@@ -2,7 +2,7 @@
 
 Sistema Inteligente de Escrita Assistida de Relatórios.
 
-Fundação técnica em Electron, React, TypeScript e Vite, com integração local ao Ollama. SQLite e processamento de documentos ainda não foram implementados.
+Aplicação Electron, React, TypeScript e Vite com integração local ao Ollama, aprendizado de modelos a partir de um único DOCX, persistência SQLite, geração estruturada e exportação DOCX.
 
 ## Uso
 
@@ -27,6 +27,9 @@ npm run dev
 - `electron/ipc/`: handlers IPC por domínio.
 - `electron/services/ollama/`: comunicação exclusiva do Main Process com o Ollama.
 - `electron/services/ai/`: prompts, interpretação e validação de dados estruturados do SIEAR.
+- `electron/services/documents/`: extração, análise e renderização de documentos.
+- `electron/repositories/templates/`: persistência dos modelos oficiais em SQLite e implementação em memória para testes.
+- `src/domain/templates/`: contrato rico e independente de infraestrutura do `ReportTemplate`.
 - `src/types/siear-api.ts`: contrato compartilhado e tipado.
 
 ## Ollama
@@ -61,20 +64,28 @@ npm exec vitest run electron/services/ai/report-extraction.integration.test.ts
 
 ## Modelos de relatório
 
-Os modelos são gerenciados no Main Process por `ReportTemplateService`, apoiado pela abstração `ReportTemplateRepository`. A implementação atual, `InMemoryReportTemplateRepository`, mantém os dados somente durante a execução e poderá ser substituída futuramente por SQLite sem alterar o contrato do Renderer.
+Os modelos são gerenciados no Main Process por `ReportTemplateService`, apoiado pela abstração `ReportTemplateRepository`. Em produção, `SqliteReportTemplateRepository` persiste integralmente os padrões estruturais, de escrita, semânticos e de formatação. `InMemoryReportTemplateRepository` é reservado aos testes unitários.
 
 Fluxo:
 
-`React → window.siear.templates → preload → templates:* → ReportTemplateService → InMemoryReportTemplateRepository`
+`DOCX → DocumentExtractor → análises estrutural/escrita/semântica/formatação → ReportTemplateBuilder → ReportTemplateService → SQLite`
 
-O modelo inicial “Relatório Técnico” define quatro seções obrigatórias e regras básicas de escrita. A interface permite visualizar, criar, editar, excluir e selecionar modelos; a seleção ainda não gera relatórios.
+A interface permite importar um único DOCX, acompanhar a análise, revisar, editar, confirmar, excluir e selecionar o modelo aprendido.
 
 ## Geração de relatório
 
-A tela “Novo Relatório” executa duas etapas: primeiro transforma a descrição em `ReportInformation`; depois combina essas informações com o modelo selecionado para produzir um `GeneratedReport`.
+A tela “Novo Relatório” interpreta a descrição como `StructuredActivity`, cria um plano determinístico a partir do modelo selecionado e solicita ao Ollama somente o preenchimento fundamentado das seções.
 
 Fluxo:
 
-`ReportInformation + templateId → IPC → ReportTemplateRepository → ReportPromptBuilder → ReportGenerationService → Ollama → GeneratedReport`
+`Texto → UserInformationExtractor → StructuredActivity → ReportGenerationPlanner + ReportTemplate → ReportGenerationService → Ollama → GeneratedReport`
 
-O template é buscado no Main Process pelo ID e nunca é aceito do Renderer como fonte confiável. A resposta do Ollama usa JSON Schema e ainda passa por validação de seções obrigatórias, nomes, conteúdo e ordem antes de chegar à interface.
+O template é buscado no Main Process pelo ID e nunca é aceito do Renderer como fonte confiável. O plano preserva hierarquia, regras de escrita, semântica e formatação. A resposta do Ollama usa JSON Schema, exige evidências fornecidas pelo usuário e é validada antes de chegar à interface.
+
+## Exportação DOCX
+
+O `DocumentRenderer` recebe o `GeneratedReport` e o `ReportTemplate` oficial. A gravação ocorre no Main Process, após seleção segura do destino:
+
+`GeneratedReport + ReportTemplate → DocumentRenderer → reports:export-docx → DOCX`
+
+O Renderer React não acessa Node.js, filesystem, SQLite ou Ollama diretamente; toda comunicação externa passa pelo preload tipado com `contextIsolation: true` e `nodeIntegration: false`.

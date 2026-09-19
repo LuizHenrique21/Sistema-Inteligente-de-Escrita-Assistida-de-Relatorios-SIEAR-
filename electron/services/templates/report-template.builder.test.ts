@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import type { FormattingPattern } from '../documents/formatting-analysis.types'
-import type { SemanticPattern } from '../documents/semantic-analysis.types'
-import type { StructurePattern } from '../documents/structure-analysis.types'
+import type {
+  FormattingPattern,
+  SemanticPattern,
+  StructurePattern,
+  WritingPattern,
+  WritingStyleProfile,
+} from '../../../src/domain/templates'
 import type {
   DocumentRepresentation,
   ParagraphFormatting,
 } from '../documents/types'
-import type {
-  WritingPattern,
-  WritingStyleProfile,
-} from '../documents/writing-analysis.types'
 import { ReportTemplateBuilder } from './report-template.builder'
+import { REPORT_TEMPLATE_VERSION } from '../../../src/domain/templates/report-template'
 
 const paragraphFormatting: ParagraphFormatting = {
   fontFamily: 'Arial',
@@ -280,65 +281,204 @@ const formatting: FormattingPattern = {
   sourceStyleIds: ['Normal', 'Heading1', 'Heading2'],
 }
 
-describe('ReportTemplateBuilder', () => {
-  const template = new ReportTemplateBuilder().build({
+describe('ReportTemplateBuilder.build', () => {
+  const structureWithActivityEvidence: StructurePattern = {
+    ...structure,
+    activityPatterns: structure.activityPatterns.map((activity) => ({
+      ...activity,
+      fields: activity.fields.map((field) => ({
+        ...field,
+        evidence: structuredClone(structure.fields[0]?.evidence ?? []),
+      })),
+    })),
+  }
+  const writingWithEvidence: WritingPattern = {
+    ...writing,
+    sectionStyles: writing.sectionStyles.map((section) => ({
+      ...section,
+      developmentPatterns: [
+        {
+          rule: 'Descrever o procedimento em ordem cronológica.',
+          justification: 'Padrão recorrente.',
+          evidence: [
+            {
+              sectionName: 'Descrição',
+              excerpt: 'Descrição da atividade',
+              reason: 'A sequência foi observada nas atividades.',
+            },
+          ],
+        },
+      ],
+    })),
+  }
+  const semanticWithRelationships: SemanticPattern = {
+    ...semantic,
+    sections: semantic.sections.map((section) => ({
+      ...section,
+      relationships: [
+        {
+          targetSection: 'Resultado',
+          relationship: 'A descrição fornece contexto para o resultado.',
+          evidence: [
+            {
+              sectionName: 'Descrição',
+              excerpt: 'Descrição da atividade',
+              reason: 'A relação foi observada na sequência das seções.',
+            },
+          ],
+        },
+      ],
+    })),
+  }
+  const input = {
     document,
-    structure,
-    writing,
-    semantic,
+    structure: structureWithActivityEvidence,
+    writing: writingWithEvidence,
+    semantic: semanticWithRelationships,
     formatting,
-  })
+  }
+  const snapshots = {
+    structure: structuredClone(structureWithActivityEvidence),
+    writing: structuredClone(writingWithEvidence),
+    semantic: structuredClone(semanticWithRelationships),
+    formatting: structuredClone(formatting),
+  }
+  const template = new ReportTemplateBuilder().build(input)
 
-  it('constrói um rascunho completo e reutilizável', () => {
-    expect(template).toMatchObject({
-      name: 'Modelo de Relatório de sprint',
-      documentType: 'Relatório de sprint',
-      status: 'draft',
-      tone: 'técnico',
-      style: 'procedimental',
-      formality: 'high',
-    })
-    expect(template.fields[0]).toMatchObject({
-      name: 'responsavel',
-      label: 'responsável',
-      required: true,
-      description: 'Pessoa responsável pela atividade.',
-    })
-    expect(template.writingRules).toContain(
-      'Descrever o procedimento em ordem cronológica.',
+  it('preserva profundamente estrutura, campos e atividades', () => {
+    expect(template.structurePattern.hierarchy[0]?.children[0]).toEqual(
+      expect.objectContaining({
+        name: 'Descrição',
+        level: 2,
+        purpose: 'Descrever a execução.',
+      }),
     )
-    expect(template.semanticRules).toContain(
-      'Descrição: Registrar o que foi feito e como.',
+    expect(template.structurePattern.recurringElements).toEqual(
+      structure.recurringElements,
     )
-    expect(template.formattingRules).toContain(
-      'Utilizar predominantemente a fonte Arial.',
+    expect(template.fields[0]?.evidence).toEqual(
+      structureWithActivityEvidence.fields[0]?.evidence,
     )
-  })
-
-  it('consolida ocorrências em uma hierarquia e atividade repetível', () => {
-    expect(template.sections.map((section) => section.name)).toEqual([
-      'Atividade',
-      'Descrição',
-    ])
-    expect(template.sections.every((section) => section.repeatable)).toBe(true)
-    expect(template.hierarchy).toHaveLength(1)
-    expect(template.hierarchy?.[0]?.children).toHaveLength(1)
-    expect(template.activityPatterns).toEqual([
+    expect(template.activityPatterns[0]).toEqual(
       expect.objectContaining({
         namePattern: 'atividade {n}',
-        sectionNames: ['descricao'],
+        sections: ['descricao'],
         repeatable: true,
-        fieldIds: [template.fields[0]?.id],
+        fields: [
+          expect.objectContaining({
+            name: 'responsavel',
+            evidence: structureWithActivityEvidence.fields[0]?.evidence,
+          }),
+        ],
       }),
-    ])
+    )
   })
 
-  it('não armazena valores específicos do documento original', () => {
-    const serialized = JSON.stringify(template)
-    expect(serialized).not.toContain('João Silva')
-    expect(serialized).not.toContain('Maria')
-    expect(serialized).not.toContain('Atividade 1')
-    expect(serialized).not.toContain('Atividade 2')
-    expect(serialized).not.toContain('Atividade X')
+  it('preserva regras de escrita, justificativas e evidências como objetos', () => {
+    expect(
+      template.writingPattern.sectionStyles[0]?.developmentPatterns[0],
+    ).toEqual({
+      rule: 'Descrever o procedimento em ordem cronológica.',
+      justification: 'Padrão recorrente.',
+      evidence: [
+        {
+          sectionName: 'Descrição',
+          excerpt: 'Descrição da atividade',
+          reason: 'A sequência foi observada nas atividades.',
+        },
+      ],
+    })
+    expect(template.writingPattern.globalStyle).toMatchObject({
+      grammaticalPerson: 'terceira pessoa',
+      verbTense: 'pretérito',
+      voice: 'passiva',
+      narrativeStyle: 'procedimental',
+    })
+    expect(
+      typeof template.writingPattern.sectionStyles[0]?.developmentPatterns[0],
+    ).toBe('object')
+  })
+
+  it('preserva finalidade, informações esperadas e relações semânticas', () => {
+    expect(
+      template.semanticPattern.sections[0]?.expectedInformation[0],
+    ).toEqual(
+      expect.objectContaining({
+        name: 'procedimento',
+        informationType: 'procedure',
+        required: true,
+        evidence: [],
+      }),
+    )
+    expect(template.semanticPattern.sections[0]?.relationships[0]).toEqual({
+      targetSection: 'Resultado',
+      relationship: 'A descrição fornece contexto para o resultado.',
+      evidence: [
+        {
+          sectionName: 'Descrição',
+          excerpt: 'Descrição da atividade',
+          reason: 'A relação foi observada na sequência das seções.',
+        },
+      ],
+    })
+    expect(typeof template.semanticPattern.sections[0]).not.toBe('string')
+  })
+
+  it('preserva propriedades completas de formatação e suas evidências', () => {
+    expect(template.formattingPattern.documentStyle).toMatchObject({
+      predominantFont: 'Arial',
+      predominantFontSizePt: 11,
+      orientation: 'portrait',
+      margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+    })
+    expect(template.formattingPattern.headingStyles[0]).toEqual(
+      expect.objectContaining({
+        sourceStyleId: 'Heading1',
+        formatting: expect.objectContaining({
+          fontSizePt: 16,
+          bold: true,
+          alignment: 'center',
+        }),
+        evidence: { elementIds: ['h1'], occurrences: 2 },
+      }),
+    )
+    expect(typeof template.formattingPattern.headingStyles[0]).toBe('object')
+  })
+
+  it('mapeia somente requisitos comprovados pela análise estrutural', () => {
+    expect(template.requirements).toEqual({
+      requiredElements: ['Atividade', 'Descrição'],
+      optionalElements: [],
+      repeatableElements: ['Atividade 1', 'Atividade 2', 'atividade {n}'],
+    })
+  })
+
+  it('gera a versão oficial e metadados sem números mágicos', () => {
+    expect(template.version).toBe(REPORT_TEMPLATE_VERSION)
+    expect(template.metadata).toMatchObject({
+      id: expect.any(String),
+      name: 'Modelo de Relatório de sprint',
+      description:
+        'Padrão reutilizável aprendido a partir de um único documento do tipo Relatório de sprint.',
+      documentType: 'Relatório de sprint',
+      status: 'draft',
+    })
+    expect(template.metadata.id).not.toBe('')
+    expect(Number.isNaN(Date.parse(template.metadata.createdAt))).toBe(false)
+    expect(template.metadata.updatedAt).toBe(template.metadata.createdAt)
+  })
+
+  it('não modifica nem compartilha referências mutáveis com as análises', () => {
+    expect(input.structure).toEqual(snapshots.structure)
+    expect(input.writing).toEqual(snapshots.writing)
+    expect(input.semantic).toEqual(snapshots.semantic)
+    expect(input.formatting).toEqual(snapshots.formatting)
+
+    expect(template.structurePattern).not.toBe(input.structure)
+    expect(template.writingPattern).not.toBe(input.writing)
+    expect(template.semanticPattern).not.toBe(input.semantic)
+    expect(template.formattingPattern).not.toBe(input.formatting)
+    expect(template.fields).not.toBe(input.structure.fields)
+    expect(template.activityPatterns).not.toBe(input.structure.activityPatterns)
   })
 })

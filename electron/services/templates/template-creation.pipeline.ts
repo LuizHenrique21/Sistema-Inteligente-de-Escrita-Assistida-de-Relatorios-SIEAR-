@@ -1,9 +1,11 @@
-import type { FormattingPattern } from '../documents/formatting-analysis.types'
-import type { SemanticPattern } from '../documents/semantic-analysis.types'
-import type { StructurePattern } from '../documents/structure-analysis.types'
+import type {
+  FormattingPattern,
+  SemanticPattern,
+  StructurePattern,
+  WritingPattern,
+} from '../../../src/domain/templates'
+import type { ReportTemplate } from '../../../src/domain/templates/report-template'
 import type { DocumentRepresentation } from '../documents/types'
-import type { WritingPattern } from '../documents/writing-analysis.types'
-import type { ReportTemplate } from '../../../src/types/report-template'
 import type { TemplateImportProgress } from '../../../src/types/template-import'
 import type { ReportTemplateBuilderInput } from './report-template.builder'
 
@@ -56,6 +58,19 @@ export class TemplateCreationPipeline {
     filePath: string,
     onProgress: TemplateCreationProgressListener = () => undefined,
   ): Promise<ReportTemplate> {
+    const analysis = await this.runAnalysis(filePath, onProgress)
+
+    onProgress({ step: 6, message: 'Construindo modelo...' })
+    const template = this.templateBuilder.build(analysis)
+
+    onProgress({ step: 7, message: 'Modelo pronto para revisão.' })
+    return template
+  }
+
+  private async runAnalysis(
+    filePath: string,
+    onProgress: TemplateCreationProgressListener,
+  ): Promise<ReportTemplateBuilderInput> {
     onProgress({ step: 1, message: 'Lendo documento...' })
     const document = await this.extractor.extract(filePath)
 
@@ -75,16 +90,12 @@ export class TemplateCreationPipeline {
     onProgress({ step: 5, message: 'Analisando formatação...' })
     const formatting = this.formattingAnalyzer.analyze(document)
 
-    onProgress({ step: 6, message: 'Construindo modelo...' })
-    const template = this.templateBuilder.build({
+    return {
       document,
       structure,
       writing,
       semantic,
       formatting,
-    })
-
-    onProgress({ step: 7, message: 'Modelo pronto para revisão.' })
-    return template
+    }
   }
 }

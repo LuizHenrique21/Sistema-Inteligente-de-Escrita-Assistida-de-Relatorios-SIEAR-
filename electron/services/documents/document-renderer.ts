@@ -7,8 +7,18 @@ import type {
   FooterStyle,
   FormattingPattern,
   HeaderStyle,
-} from './formatting-analysis.types'
-import type { ParagraphFormatting } from './types'
+  ParagraphFormatting,
+} from '../../../src/domain/templates/formatting-pattern'
+import type { ReportTemplate } from '../../../src/domain/templates/report-template'
+
+/** Limitações decorrentes de dados que o contrato aprendido ainda não fornece. */
+export const DOCUMENT_RENDERER_LIMITATIONS = [
+  'Figuras usam dimensões padrão porque FigureStyle não armazena largura e altura.',
+  'Elementos gerados não informam nível de lista; listas são renderizadas no nível zero.',
+  'HeaderStyle e FooterStyle armazenam texto agregado; múltiplos parágrafos internos não podem ser reconstruídos.',
+  'PageBreakCount isolado não informa posições; somente quebras associadas a seções ou elementos são reproduzidas.',
+  'SourceStyleId preserva o identificador, mas o contrato não contém a definição OOXML completa do estilo original.',
+] as const
 
 function xml(value: string): string {
   return value
@@ -139,6 +149,7 @@ function tableXml(
   rows: string[][],
   headerRows: number,
   styleId: string | null,
+  alignment: string | null,
 ): string {
   const body = rows
     .map(
@@ -151,7 +162,7 @@ function tableXml(
           .join('')}</w:tr>`,
     )
     .join('')
-  return `<w:tbl><w:tblPr>${styleId ? `<w:tblStyle w:val="${xml(styleId)}"/>` : ''}<w:tblW w:w="0" w:type="auto"/></w:tblPr>${body}</w:tbl>`
+  return `<w:tbl><w:tblPr>${styleId ? `<w:tblStyle w:val="${xml(styleId)}"/>` : ''}${alignment ? `<w:jc w:val="${xml(alignment)}"/>` : ''}<w:tblW w:w="0" w:type="auto"/></w:tblPr>${body}</w:tbl>`
 }
 
 function drawingXml(
@@ -167,7 +178,13 @@ function headerFooterXml(
   type: 'hdr' | 'ftr',
 ): string {
   const format = style.formatting ?? {}
-  const parts = style.text.split(/\bPAGE\b/i)
+  const text =
+    'containsPageNumber' in style &&
+    style.containsPageNumber &&
+    !/\bPAGE\b/i.test(style.text)
+      ? `${style.text} PAGE`
+      : style.text
+  const parts = text.split(/\bPAGE\b/i)
   const runs = parts
     .map(
       (part, index) =>
@@ -180,8 +197,9 @@ function headerFooterXml(
 export class DocumentRenderer {
   async render(
     report: GeneratedReport,
-    pattern: FormattingPattern,
+    template: ReportTemplate,
   ): Promise<Buffer> {
+    const pattern = template.formattingPattern
     const zip = new JSZip()
     const imageFiles: Array<{
       path: string
@@ -193,6 +211,20 @@ export class DocumentRenderer {
       string,
       { id: string; level: number; format: ParagraphFormatting }
     >()
+    const sectionLevelByName = new Map<string, number>()
+    const visitStructure = (
+      sections: ReportTemplate['structurePattern']['hierarchy'],
+    ): void => {
+      for (const section of sections) {
+        sectionLevelByName.set(section.name, section.level)
+        visitStructure(section.children)
+      }
+    }
+    visitStructure(
+      template.structurePattern.hierarchy.length
+        ? template.structurePattern.hierarchy
+        : template.structurePattern.sections,
+    )
     pattern.headingStyles.forEach((style, index) => {
       for (const name of style.sectionNames)
         headingStyleBySection.set(name, {
@@ -203,14 +235,20 @@ export class DocumentRenderer {
     })
 
     const body: string[] = []
-    const orderedSections = [...report.sections].sort(
-      (a, b) => a.order - b.order,
-    )
+    const orderedSections = report.sections
     for (const section of orderedSections) {
+      const structuralLevel = sectionLevelByName.get(section.name) ?? 1
+      const fallbackHeadingIndex = pattern.headingStyles.findIndex(
+        (style) => style.level === structuralLevel,
+      )
+      const fallbackHeading =
+        pattern.headingStyles[fallbackHeadingIndex] ?? pattern.headingStyles[0]
       const learnedHeading = headingStyleBySection.get(section.name) ?? {
-        id: pattern.headingStyles.length ? 'SIEARHeading1' : 'Normal',
-        level: pattern.headingStyles[0]?.level ?? 1,
-        format: pattern.headingStyles[0]?.formatting ?? {},
+        id: fallbackHeading
+          ? `SIEARHeading${Math.max(0, fallbackHeadingIndex) + 1}`
+          : 'Normal',
+        level: fallbackHeading?.level ?? structuralLevel,
+        format: fallbackHeading?.formatting ?? {},
       }
       const pageBreak = pattern.documentStyle.pageBreakBeforeSections.includes(
         section.name,
@@ -224,9 +262,15 @@ export class DocumentRenderer {
         pattern.paragraphStyles.find(
           (style) => style.sectionName === section.name,
         ) ?? pattern.paragraphStyles[0]
+      const sectionFont = pattern.documentStyle.sectionFonts.find(
+        (font) => font.sectionName === section.name,
+      )
       const paragraphFormat = paragraphStyle?.formatting ?? {
-        fontFamily: pattern.documentStyle.predominantFont,
-        fontSizePt: pattern.documentStyle.predominantFontSizePt,
+        fontFamily:
+          sectionFont?.fontFamily ?? pattern.documentStyle.predominantFont,
+        fontSizePt:
+          sectionFont?.fontSizePt ??
+          pattern.documentStyle.predominantFontSizePt,
       }
       const elements = section.elements ?? derivedElements(section.content)
       for (const element of elements) {
@@ -262,6 +306,7 @@ export class DocumentRenderer {
               element.rows,
               element.headerRows,
               pattern.tableStyles[0]?.sourceStyleId ?? 'TableGrid',
+              pattern.tableStyles[0]?.alignment ?? null,
             ),
           )
         if (element.type === 'page-break')
@@ -297,6 +342,7 @@ export class DocumentRenderer {
     const relationshipEntries: string[] = [
       '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>',
       '<Relationship Id="rIdNumbering" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>',
+      '<Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>',
     ]
     pattern.headerStyles.forEach((style, index) => {
       const id = `rIdHeader${index + 1}`,
@@ -331,13 +377,25 @@ export class DocumentRenderer {
     const pageWidth = twips(page.pageWidthPt) ?? '12240',
       pageHeight = twips(page.pageHeightPt) ?? '15840'
     const margins = page.margins
-    const sectPr = `<w:sectPr>${headerReferences.join('')}${footerReferences.join('')}<w:pgSz w:w="${pageWidth}" w:h="${pageHeight}"${page.orientation ? ` w:orient="${page.orientation}"` : ''}/><w:pgMar w:top="${twips(margins.topPt) ?? '1440'}" w:right="${twips(margins.rightPt) ?? '1440'}" w:bottom="${twips(margins.bottomPt) ?? '1440'}" w:left="${twips(margins.leftPt) ?? '1440'}" w:header="720" w:footer="720" w:gutter="0"/>${page.hasPageNumbering ? '<w:pgNumType w:start="1"/>' : ''}</w:sectPr>`
+    const hasFirstPageVariant = [
+      ...pattern.headerStyles,
+      ...pattern.footerStyles,
+    ].some((style) => style.variant === 'first')
+    const sectPr = `<w:sectPr>${headerReferences.join('')}${footerReferences.join('')}${hasFirstPageVariant ? '<w:titlePg/>' : ''}<w:pgSz w:w="${pageWidth}" w:h="${pageHeight}"${page.orientation ? ` w:orient="${page.orientation}"` : ''}/><w:pgMar w:top="${twips(margins.topPt) ?? '1440'}" w:right="${twips(margins.rightPt) ?? '1440'}" w:bottom="${twips(margins.bottomPt) ?? '1440'}" w:left="${twips(margins.leftPt) ?? '1440'}" w:header="720" w:footer="720" w:gutter="0"/>${page.hasPageNumbering ? '<w:pgNumType w:start="1"/>' : ''}</w:sectPr>`
     zip.file(
       'word/document.xml',
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>${body.join('')}${sectPr}</w:body></w:document>`,
     )
     zip.file('word/styles.xml', this.stylesXml(pattern))
     zip.file('word/numbering.xml', this.numberingXml(pattern))
+    const hasEvenPageVariant = [
+      ...pattern.headerStyles,
+      ...pattern.footerStyles,
+    ].some((style) => style.variant === 'even')
+    zip.file(
+      'word/settings.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${hasEvenPageVariant ? '<w:evenAndOddHeaders/>' : ''}</w:settings>`,
+    )
     zip.file(
       'word/_rels/document.xml.rels',
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relationshipEntries.join('')}</Relationships>`,
@@ -404,6 +462,6 @@ export class DocumentRenderer {
         image.contentType,
       ),
     )
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">${[...defaults].map(([extension, type]) => `<Default Extension="${extension}" ContentType="${type}"/>`).join('')}<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>${pattern.headerStyles.map((_, index) => `<Override PartName="/word/header${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`).join('')}${pattern.footerStyles.map((_, index) => `<Override PartName="/word/footer${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>`).join('')}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">${[...defaults].map(([extension, type]) => `<Default Extension="${extension}" ContentType="${type}"/>`).join('')}<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>${pattern.headerStyles.map((_, index) => `<Override PartName="/word/header${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`).join('')}${pattern.footerStyles.map((_, index) => `<Override PartName="/word/footer${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>`).join('')}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`
   }
 }

@@ -1,4 +1,4 @@
-import type { StructurePattern } from '../../documents/structure-analysis.types'
+import type { StructurePattern } from '../../../../src/domain/templates/structure-pattern'
 import type { DocumentRepresentation } from '../../documents/types'
 
 export interface WritingSectionSample {

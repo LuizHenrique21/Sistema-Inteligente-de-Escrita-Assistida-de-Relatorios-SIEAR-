@@ -1,4 +1,4 @@
-import type { StructureFieldType } from './structure-analysis.types'
+import type { StructureFieldType } from './structure-pattern'
 
 export interface SemanticEvidence {
   sectionName: string | null
