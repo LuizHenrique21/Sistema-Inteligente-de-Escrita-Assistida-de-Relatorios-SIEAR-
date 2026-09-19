@@ -1,9 +1,18 @@
 import type { StructuredTextGenerator } from '../ai/report-extraction.service'
+import { getLogger } from '../../infrastructure/logging/logger.runtime'
+
+const logger = getLogger('StructureAnalysisService')
+export const STRUCTURE_ANALYZER_VERSION = '1' as const
+export const STRUCTURE_PATTERN_STAGE_VERSION = '1' as const
 import {
   buildStructureAnalysisPrompt,
   buildStructureSemanticSummary,
 } from '../ai/prompts/structure-analysis.prompt'
 import type { DocumentRepresentation, ExtractedSection } from './types'
+import {
+  asDocumentAnalysisContext,
+  type DocumentAnalysisContext,
+} from './document-analysis-context'
 import type {
   ActivityPattern,
   FieldEvidence,
@@ -47,6 +56,19 @@ const SEMANTIC_SCHEMA: Record<string, unknown> = {
   },
   required: ['documentType', 'sectionPurposes'],
   additionalProperties: false,
+}
+
+function constrainedSemanticSchema(
+  sectionNames: string[],
+): Record<string, unknown> {
+  const schema = structuredClone(SEMANTIC_SCHEMA)
+  const properties = schema.properties as Record<string, unknown>
+  const purposes = properties.sectionPurposes as Record<string, unknown>
+  const items = purposes.items as Record<string, unknown>
+  const itemProperties = items.properties as Record<string, unknown>
+  itemProperties.name = { type: 'string', enum: sectionNames }
+  purposes.maxItems = sectionNames.length
+  return schema
 }
 
 interface SemanticAnalysis {
@@ -204,9 +226,10 @@ function buildSectionPatterns(sections: ExtractedSection[]): {
 }
 
 function activityPatterns(
-  document: DocumentRepresentation,
+  context: DocumentAnalysisContext,
   fields: StructureField[],
 ): ActivityPattern[] {
+  const document = context.document
   const groups = new Map<string, ExtractedSection[]>()
   for (const section of document.sections) {
     const key = canonicalActivity(section.title)
@@ -250,9 +273,8 @@ function activityPatterns(
         roots.every((root) => {
           const sectionIds = descendantsOf(root.id)
           return field.evidence.some((evidence) => {
-            const sectionId = document.paragraphs.find(
-              (paragraph) => paragraph.id === evidence.elementId,
-            )?.sectionId
+            const sectionId = context.paragraphById.get(evidence.elementId)
+              ?.sectionId
             return (
               sectionId !== null &&
               sectionId !== undefined &&
@@ -326,7 +348,7 @@ function recurringElements(
 
 function validSemantic(
   value: unknown,
-  sectionNames: Set<string>,
+  sectionNames: Map<string, string>,
 ): value is SemanticAnalysis {
   if (typeof value !== 'object' || value === null || Array.isArray(value))
     return false
@@ -346,31 +368,45 @@ function validSemantic(
     !Array.isArray(item.sectionPurposes)
   )
     return false
+  const returnedNames = new Set<string>()
   return item.sectionPurposes.every((entry) => {
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry))
       return false
     const purpose = entry as Record<string, unknown>
-    return (
+    if (!(
       Object.keys(purpose).length === 2 &&
       Object.hasOwn(purpose, 'name') &&
       Object.hasOwn(purpose, 'purpose') &&
       typeof purpose.name === 'string' &&
       purpose.name.trim() !== '' &&
-      sectionNames.has(purpose.name) &&
       (typeof purpose.purpose === 'string' || purpose.purpose === null)
-    )
+    ))
+      return false
+    const canonicalName = normalize(purpose.name)
+    if (!sectionNames.has(canonicalName) || returnedNames.has(canonicalName))
+      return false
+    returnedNames.add(canonicalName)
+    return true
   })
 }
 
 export class StructureAnalysisService {
   constructor(private readonly semanticGenerator?: StructuredTextGenerator) {}
 
-  async analyze(document: DocumentRepresentation): Promise<StructurePattern> {
+  async analyze(
+    source: DocumentRepresentation | DocumentAnalysisContext,
+  ): Promise<StructurePattern> {
+    const context = asDocumentAnalysisContext(source)
+    const document = context.document
+    const timer = logger.startTimer('Structure analysis')
+    logger.info('Structure analysis started', {
+      sourceSections: document.sections.length,
+    })
     const fields = extractFields(document)
     const { flat: sections, hierarchy } = buildSectionPatterns(
       document.sections,
     )
-    const activities = activityPatterns(document, fields)
+    const activities = activityPatterns(context, fields)
     const title =
       document.metadata.title ??
       document.headings.find(
@@ -395,7 +431,7 @@ export class StructureAnalysisService {
       )
       const response = await this.semanticGenerator.generateJson(
         buildStructureAnalysisPrompt(summary),
-        SEMANTIC_SCHEMA,
+        constrainedSemanticSchema(sections.map((section) => section.name)),
       )
       let semantic: unknown
       try {
@@ -405,7 +441,9 @@ export class StructureAnalysisService {
           'O Ollama retornou JSON inválido para a análise estrutural.',
         )
       }
-      const sectionNames = new Set(sections.map((section) => section.name))
+      const sectionNames = new Map(
+        sections.map((section) => [normalize(section.name), section.name]),
+      )
       if (!validSemantic(semantic, sectionNames))
         throw new StructureAnalysisError(
           'A resposta semântica não corresponde ao contrato estrutural ou menciona seções inexistentes.',
@@ -414,8 +452,9 @@ export class StructureAnalysisService {
       for (const section of sections) {
         if (section.purpose !== null) continue
         section.purpose =
-          semantic.sectionPurposes.find((item) => item.name === section.name)
-            ?.purpose ?? null
+          semantic.sectionPurposes.find(
+            (item) => normalize(item.name) === normalize(section.name),
+          )?.purpose ?? null
       }
     }
 
@@ -445,7 +484,7 @@ export class StructureAnalysisService {
     const optionalElements = sections
       .filter((section) => !section.required)
       .map((section) => section.name)
-    return {
+    const result: StructurePattern = {
       documentType,
       mainTitle: title,
       hierarchy,
@@ -456,5 +495,11 @@ export class StructureAnalysisService {
       optionalElements,
       requiredElements,
     }
+    timer.end('Structure analysis completed', {
+      sections: result.sections.length,
+      fields: result.fields.length,
+      activities: result.activityPatterns.length,
+    })
+    return result
   }
 }

@@ -50,11 +50,7 @@ function PatternSection({ title, value }: { title: string; value: object }) {
   )
 }
 
-export function TemplateReview({
-  template,
-}: {
-  template: ReportTemplate
-}) {
+export function TemplateReview({ template }: { template: ReportTemplate }) {
   return (
     <div className="template-review" data-template-version={template.version}>
       <section>

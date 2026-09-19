@@ -4,6 +4,11 @@ import {
   buildSemanticAnalysisPrompt,
 } from './prompts/semantic-analysis.prompt'
 import type { StructuredTextGenerator } from './report-extraction.service'
+import { getLogger } from '../../infrastructure/logging/logger.runtime'
+
+const logger = getLogger('SemanticAnalysisService')
+export const SEMANTIC_ANALYZER_VERSION = '1' as const
+export const SEMANTIC_PATTERN_STAGE_VERSION = '1' as const
 import type {
   ActivitySemanticPattern,
   ExpectedInformation,
@@ -17,6 +22,7 @@ import type {
   WritingPattern,
 } from '../../../src/domain/templates'
 import type { DocumentRepresentation } from '../documents/types'
+import type { DocumentAnalysisContext } from '../documents/document-analysis-context'
 
 const ROOT_KEYS = [
   'documentType',
@@ -442,10 +448,14 @@ export class SemanticAnalysisService {
   constructor(private readonly generator: StructuredTextGenerator) {}
 
   async analyze(
-    document: DocumentRepresentation,
+    document: DocumentRepresentation | DocumentAnalysisContext,
     structure: StructurePattern,
     writing: WritingPattern,
   ): Promise<SemanticPattern> {
+    const timer = logger.startTimer('Semantic analysis')
+    logger.info('Semantic analysis started', {
+      sections: structure.sections.length,
+    })
     const input = buildSemanticAnalysisInput(document, structure, writing)
     const response = await this.generator.generateJson(
       buildSemanticAnalysisPrompt(input),
@@ -463,6 +473,11 @@ export class SemanticAnalysisService {
       throw new SemanticAnalysisError(
         'A análise semântica não corresponde ao contrato ou contém informações inventadas.',
       )
+    timer.end('Semantic analysis completed', {
+      sections: parsed.sections.length,
+      relations: parsed.crossSectionRelations.length,
+      uncertainties: parsed.uncertainties.length,
+    })
     return parsed
   }
 }

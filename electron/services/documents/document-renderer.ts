@@ -10,6 +10,10 @@ import type {
   ParagraphFormatting,
 } from '../../../src/domain/templates/formatting-pattern'
 import type { ReportTemplate } from '../../../src/domain/templates/report-template'
+import { getLogger } from '../../infrastructure/logging/logger.runtime'
+import { resolveCpuWorkerPolicy } from '../workers/cpu-worker-policy'
+
+const logger = getLogger('DocumentRenderer')
 
 /** Limitações decorrentes de dados que o contrato aprendido ainda não fornece. */
 export const DOCUMENT_RENDERER_LIMITATIONS = [
@@ -19,6 +23,38 @@ export const DOCUMENT_RENDERER_LIMITATIONS = [
   'PageBreakCount isolado não informa posições; somente quebras associadas a seções ou elementos são reproduzidas.',
   'SourceStyleId preserva o identificador, mas o contrato não contém a definição OOXML completa do estilo original.',
 ] as const
+
+export interface DocumentRendererOptions {
+  useWorker?: boolean
+  workerThresholdSections?: number
+  requestId?: string
+  signal?: AbortSignal
+  timeoutMs?: number
+}
+
+function renderWorkerThreshold(options: DocumentRendererOptions): number {
+  return (
+    options.workerThresholdSections ??
+    resolveCpuWorkerPolicy().renderingThresholdSections
+  )
+}
+
+function shouldUseRenderWorker(
+  report: GeneratedReport,
+  options: DocumentRendererOptions,
+): boolean {
+  if (options.useWorker === false) return false
+  if (options.useWorker === true) return true
+  const elementCount = report.sections.reduce(
+    (total, section) => total + (section.elements?.length ?? 0),
+    0,
+  )
+  const policy = resolveCpuWorkerPolicy()
+  return (
+    report.sections.length >= renderWorkerThreshold(options) ||
+    elementCount >= policy.renderingThresholdElements
+  )
+}
 
 function xml(value: string): string {
   return value
@@ -195,10 +231,31 @@ function headerFooterXml(
 }
 
 export class DocumentRenderer {
+  constructor(private readonly options: DocumentRendererOptions = {}) {}
+
   async render(
     report: GeneratedReport,
     template: ReportTemplate,
   ): Promise<Buffer> {
+    if (shouldUseRenderWorker(report, this.options)) {
+      const { runCpuWorkerTask } = await import(
+        '../workers/cpu-bound-worker.host'
+      )
+      const result = await runCpuWorkerTask(
+        'docx-render',
+        { report, template },
+        {
+          requestId: this.options.requestId,
+          signal: this.options.signal,
+          timeoutMs: this.options.timeoutMs ?? resolveCpuWorkerPolicy().timeoutMs,
+        },
+      )
+      return Buffer.from(result.value)
+    }
+    const timer = logger.startTimer('Document render', {
+      templateId: template.metadata.id,
+      sections: report.sections.length,
+    })
     const pattern = template.formattingPattern
     const zip = new JSZip()
     const imageFiles: Array<{
@@ -409,7 +466,21 @@ export class DocumentRenderer {
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>${xml(report.templateName)}</dc:title><dc:creator>SIEAR</dc:creator></cp:coreProperties>`,
     )
     zip.file('[Content_Types].xml', this.contentTypes(pattern, imageFiles))
-    return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
+    const output = await zip.generateAsync({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+    })
+    const elements = report.sections.flatMap(
+      (section) => section.elements ?? [],
+    )
+    timer.end('Document render completed', {
+      outputBytes: output.byteLength,
+      paragraphs: elements.filter((element) => element.type === 'paragraph')
+        .length,
+      tables: elements.filter((element) => element.type === 'table').length,
+      figures: imageFiles.length,
+    })
+    return output
   }
 
   private stylesXml(pattern: FormattingPattern): string {

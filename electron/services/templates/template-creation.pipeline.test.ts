@@ -117,9 +117,12 @@ describe('TemplateCreationPipeline', () => {
       'Construindo modelo...',
       'Modelo pronto para revisão.',
     ])
-    expect(writingAnalyzer.analyze).toHaveBeenCalledWith(document, structure)
+    expect(writingAnalyzer.analyze).toHaveBeenCalledWith(
+      expect.objectContaining({ document, structure }),
+      structure,
+    )
     expect(semanticAnalyzer.analyze).toHaveBeenCalledWith(
-      document,
+      expect.objectContaining({ document, structure }),
       structure,
       writing,
     )
@@ -437,17 +440,21 @@ describe('TemplateCreationPipeline', () => {
       progress.push(item.step),
     )
 
-    expect(structureAnalyzer.analyze).toHaveBeenCalledWith(document)
+    expect(structureAnalyzer.analyze).toHaveBeenCalledWith(
+      expect.objectContaining({ document }),
+    )
     expect(writingAnalyzer.analyze).toHaveBeenCalledWith(
-      document,
+      expect.objectContaining({ document, structure: richStructure }),
       richStructure,
     )
     expect(semanticAnalyzer.analyze).toHaveBeenCalledWith(
-      document,
+      expect.objectContaining({ document, structure: richStructure }),
       richStructure,
       richWriting,
     )
-    expect(formattingAnalyzer.analyze).toHaveBeenCalledWith(document)
+    expect(formattingAnalyzer.analyze).toHaveBeenCalledWith(
+      expect.objectContaining({ document, structure: richStructure }),
+    )
     expect(build).toHaveBeenCalledWith({
       document,
       structure: richStructure,

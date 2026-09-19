@@ -10,6 +10,9 @@ import type {
   ReportGenerationPlan,
   StructuredActivity,
 } from '../../../src/types/generated-report'
+import { getLogger } from '../../infrastructure/logging/logger.runtime'
+
+const logger = getLogger('ReportGenerationPlanner')
 
 function normalize(value: string): string {
   return value
@@ -109,6 +112,10 @@ export class ReportGenerationPlanner {
     information: StructuredActivity,
     template: ReportTemplate,
   ): ReportGenerationPlan {
+    const timer = logger.startTimer('Report planning', {
+      templateId: template.metadata.id,
+      activities: information.activities.length,
+    })
     const missing = template.fields
       .filter(
         (field) =>
@@ -191,7 +198,7 @@ export class ReportGenerationPlanner {
       },
     )
 
-    return {
+    const plan: ReportGenerationPlan = {
       missing,
       sections,
       groundingPolicy: {
@@ -211,5 +218,10 @@ export class ReportGenerationPlanner {
         formattingPattern: template.formattingPattern,
       },
     }
+    timer.end('Report planning completed', {
+      sections: plan.sections.length,
+      missing: plan.missing.length,
+    })
+    return plan
   }
 }

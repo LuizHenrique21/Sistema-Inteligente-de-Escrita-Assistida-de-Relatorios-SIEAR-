@@ -115,11 +115,11 @@ describe('ReportGenerationService', () => {
       new ReportGenerationService({
         generateJson: vi.fn().mockResolvedValue(unknown),
       }).generate(information, plan, template),
-    ).rejects.toThrow('inexistentes')
+    ).rejects.toThrow('seção diferente')
     await expect(
       new ReportGenerationService({
         generateJson: vi.fn().mockResolvedValue('{"sections":[]}'),
       }).generate(information, plan, template),
-    ).rejects.toThrow('plano de geração')
+    ).rejects.toThrow('seção diferente')
   })
 })

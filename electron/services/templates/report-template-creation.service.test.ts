@@ -312,6 +312,24 @@ describe('ReportTemplateCreationService', () => {
     expect(typeof result.formattingPattern.headingStyles[0]).toBe('object')
   })
 
+  it('retorna o template já persistido quando consolidation é reutilizado', async () => {
+    const analyzed = richTemplate()
+    const pipeline = { execute: vi.fn().mockResolvedValue(analyzed) }
+    const templateService = {
+      getById: vi.fn().mockResolvedValue(analyzed),
+      create: vi.fn(),
+    }
+    const applicationService = new ReportTemplateCreationService(
+      pipeline,
+      templateService,
+    )
+
+    await expect(
+      applicationService.createFromDocument('modelo.docx'),
+    ).resolves.toEqual(analyzed)
+    expect(templateService.create).not.toHaveBeenCalled()
+  })
+
   it('mantém o pipeline livre de dependências de repository', () => {
     const source = readFileSync(
       'electron/services/templates/template-creation.pipeline.ts',

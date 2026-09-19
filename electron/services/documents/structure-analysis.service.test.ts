@@ -296,6 +296,39 @@ describe('StructureAnalysisService', () => {
     expect(prompt).not.toContain(document.text)
   })
 
+  it('associa semanticamente nomes reais com diferenças de caixa, acento e numeração', async () => {
+    const generator = {
+      generateJson: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          documentType: 'Relatório operacional',
+          sectionPurposes: [
+            {
+              name: '1. ESCOPO AGIL',
+              purpose: 'Contextualizar a operação.',
+            },
+          ],
+        }),
+      ),
+    }
+    const result = await new StructureAnalysisService(generator).analyze(
+      documentFixture({
+        title: null,
+        sections: [
+          {
+            id: 'scope',
+            title: 'Escopo Ágil',
+            level: 1,
+            order: 1,
+            content: 'Contexto específico.',
+            parentSectionId: null,
+          },
+        ],
+      }),
+    )
+
+    expect(result.sections[0]?.purpose).toBe('Contextualizar a operação.')
+  })
+
   it('rejeita JSON inválido e referências a seções inexistentes no fallback', async () => {
     const ambiguous = documentFixture({
       title: null,

@@ -2,6 +2,10 @@ import type {
   GenerateReportResult,
   StructuredActivity,
 } from '../../../src/types/generated-report'
+import { getLogger } from '../../infrastructure/logging/logger.runtime'
+import { serializeError } from '../../infrastructure/logging/log-sanitizer'
+
+const logger = getLogger('ReportGenerationPipeline')
 import type { ReportTemplate } from '../../../src/domain/templates/report-template'
 import type {
   GeneratedReport,
@@ -38,23 +42,37 @@ export class ReportGenerationPipeline {
     text: string,
     template: ReportTemplate,
   ): Promise<GenerateReportResult> {
-    const information: StructuredActivity = await this.extractor.extract(
-      text,
-      template,
-    )
-    const plan = this.planner.plan(information, template)
-    if (plan.missing.length > 0) {
-      return {
-        success: true,
-        requiresInput: true,
-        structuredActivity: information,
-        missing: plan.missing,
-        questions: plan.missing.map((item) => item.question),
+    const timer = logger.startTimer('Report generation', {
+      templateId: template.metadata.id,
+    })
+    try {
+      const information: StructuredActivity = await this.extractor.extract(
+        text,
+        template,
+      )
+      const plan = this.planner.plan(information, template)
+      if (plan.missing.length > 0) {
+        timer.end('Report generation requires input', {
+          missing: plan.missing.length,
+        })
+        return {
+          success: true,
+          requiresInput: true,
+          structuredActivity: information,
+          missing: plan.missing,
+          questions: plan.missing.map((item) => item.question),
+        }
       }
-    }
-    return {
-      success: true,
-      data: await this.generator.generate(information, plan, template),
+      const data = await this.generator.generate(information, plan, template)
+      timer.end('Report generation completed', {
+        sections: data.sections.length,
+      })
+      return { success: true, data }
+    } catch (error: unknown) {
+      logger.error('Report generation failed', {
+        error: serializeError(error),
+      })
+      throw error
     }
   }
 }

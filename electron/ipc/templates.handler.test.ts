@@ -5,6 +5,7 @@ import {
   type ReportTemplate,
 } from '../../src/domain/templates/report-template'
 import { createTemplatesHandlers } from './templates.handler'
+import { OllamaServiceError } from '../services/ollama/ollama.service'
 
 function template(): ReportTemplate {
   const evidence = {
@@ -204,6 +205,36 @@ describe('handlers IPC de templates', () => {
     expect(creation.createFromDocument).not.toHaveBeenCalled()
   })
 
+  it('preserva o código e a mensagem controlada de timeout do Ollama', async () => {
+    const creation = {
+      createFromDocument: vi
+        .fn()
+        .mockRejectedValue(
+          new OllamaServiceError(
+            'TIMEOUT',
+            'O Ollama demorou demais para responder. Tente novamente.',
+          ),
+        ),
+    }
+    const handlers = createTemplatesHandlers(creation, {
+      getAll: vi.fn(),
+      getById: vi.fn(),
+      update: vi.fn(),
+      confirm: vi.fn(),
+      delete: vi.fn(),
+    })
+
+    await expect(
+      handlers.createFromDocument({ filePath: 'modelo.docx' }),
+    ).resolves.toEqual({
+      success: false,
+      error: {
+        code: 'TIMEOUT',
+        message: 'O Ollama demorou demais para responder. Tente novamente.',
+      },
+    })
+  })
+
   it('delega get-all e valida get-by-id', async () => {
     const service = {
       getAll: vi.fn().mockResolvedValue([template()]),
@@ -264,9 +295,7 @@ describe('handlers IPC de templates', () => {
       { createFromDocument: vi.fn() },
       service,
     )
-    await expect(
-      handlers.confirm({ id: 'template' }),
-    ).resolves.toMatchObject({
+    await expect(handlers.confirm({ id: 'template' })).resolves.toMatchObject({
       success: false,
       error: { code: 'VALIDATION_ERROR' },
     })

@@ -276,8 +276,8 @@ function fixture(): DocumentRepresentation {
 }
 
 describe('FormattingAnalysisService', () => {
-  it('identifica fonte predominante, fontes por seção e propriedades da página', () => {
-    const result = new FormattingAnalysisService().analyze(fixture())
+  it('identifica fonte predominante, fontes por seção e propriedades da página', async () => {
+    const result = await new FormattingAnalysisService().analyze(fixture())
     expect(result.documentStyle).toMatchObject({
       predominantFont: 'Arial',
       predominantFontSizePt: 11,
@@ -295,8 +295,8 @@ describe('FormattingAnalysisService', () => {
     })
   })
 
-  it('resolve herança e cria estilos reutilizáveis para títulos, parágrafos e legendas', () => {
-    const result = new FormattingAnalysisService().analyze(fixture())
+  it('resolve herança e cria estilos reutilizáveis para títulos, parágrafos e legendas', async () => {
+    const result = await new FormattingAnalysisService().analyze(fixture())
     expect(result.headingStyles[0]).toMatchObject({
       level: 1,
       sourceStyleId: 'Heading1',
@@ -327,8 +327,8 @@ describe('FormattingAnalysisService', () => {
     })
   })
 
-  it('preserva propriedades de listas, tabelas, figuras, cabeçalho e rodapé', () => {
-    const result = new FormattingAnalysisService().analyze(fixture())
+  it('preserva propriedades de listas, tabelas, figuras, cabeçalho e rodapé', async () => {
+    const result = await new FormattingAnalysisService().analyze(fixture())
     expect(result.listStyles[0]).toMatchObject({
       ordered: true,
       format: 'decimal',
@@ -366,7 +366,7 @@ describe('FormattingAnalysisService', () => {
     ])
   })
 
-  it('retorna padrões vazios e valores nulos quando a informação não está disponível', () => {
+  it('retorna padrões vazios e valores nulos quando a informação não está disponível', async () => {
     const document = fixture()
     document.paragraphs = []
     document.sections = []
@@ -385,7 +385,7 @@ describe('FormattingAnalysisService', () => {
       pageBreakCount: 0,
       hasPageNumbering: false,
     }
-    const result = new FormattingAnalysisService().analyze(document)
+    const result = await new FormattingAnalysisService().analyze(document)
     expect(result.documentStyle).toMatchObject({
       predominantFont: null,
       predominantFontSizePt: null,
@@ -393,5 +393,17 @@ describe('FormattingAnalysisService', () => {
     })
     expect(result.headingStyles).toEqual([])
     expect(result.headerStyles).toEqual([])
+  })
+
+  it('produz o mesmo padrao de formatacao no main e no worker', async () => {
+    const document = fixture()
+    const main = await new FormattingAnalysisService({
+      useWorker: false,
+    }).analyze(document)
+    const worker = await new FormattingAnalysisService({
+      useWorker: true,
+    }).analyze(document)
+
+    expect(worker).toEqual(main)
   })
 })

@@ -13,6 +13,10 @@ import {
   type ReportTemplate,
 } from '../../src/domain/templates/report-template'
 import { isReportTemplate } from '../services/templates/report-template.validation'
+import { getLogger } from '../infrastructure/logging/logger.runtime'
+import { serializeError } from '../infrastructure/logging/log-sanitizer'
+
+const logger = getLogger('TemplatesHandler')
 
 interface TemplateCreationPort {
   createFromDocument(
@@ -35,11 +39,10 @@ function failure<T>(code: string, message: string): TemplatesResult<T> {
 
 function safeError<T>(error: unknown): TemplatesResult<T> {
   if (error instanceof OllamaServiceError) {
-    console.error('[SIEAR] Falha do Ollama em templates:', error)
-    return failure(
-      'ANALYSIS_ERROR',
-      'Não foi possível concluir a análise do documento.',
-    )
+    logger.error('Template operation failed in Ollama', {
+      error: serializeError(error),
+    })
+    return failure(error.code, error.message)
   }
   if (
     error instanceof ReportTemplateServiceError ||
@@ -51,7 +54,7 @@ function safeError<T>(error: unknown): TemplatesResult<T> {
   ) {
     return failure(error.code, error.message)
   }
-  console.error('[SIEAR] Falha em templates:', error)
+  logger.error('Template operation failed', { error: serializeError(error) })
   return failure(
     'UNEXPECTED_ERROR',
     'Ocorreu um erro inesperado ao gerenciar o modelo.',

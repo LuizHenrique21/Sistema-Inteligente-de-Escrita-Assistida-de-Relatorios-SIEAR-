@@ -1,13 +1,21 @@
 import { randomUUID } from 'node:crypto'
 import type {
   GeneratedReport,
+  GeneratedReportSection,
+  PlannedReportSection,
   ReportGenerationPlan,
   StructuredActivity,
 } from '../../../src/types/generated-report'
 import type { ReportTemplate } from '../../../src/domain/templates/report-template'
-import { buildReportGenerationPrompt } from './prompts/report-generation.prompt'
+import {
+  buildGenerationPromptContext,
+  buildReportGenerationPrompt,
+} from './prompts/report-generation.prompt'
 import type { StructuredTextGenerator } from './report-extraction.service'
 import { ReportGenerationServiceError } from './report-generation.error'
+import { getLogger } from '../../infrastructure/logging/logger.runtime'
+
+const logger = getLogger('ReportGenerationService')
 
 interface GroundedSection {
   sectionId: string
@@ -79,6 +87,23 @@ function parse(
   return sections as GroundedSection[]
 }
 
+function parseSection(
+  response: string,
+  information: StructuredActivity,
+  section: PlannedReportSection,
+): GroundedSection {
+  const sections = parse(response, information)
+  if (
+    sections.length !== 1 ||
+    sections[0]?.sectionId !== section.sectionId ||
+    sections[0].name !== section.sectionName
+  )
+    throw new ReportGenerationServiceError(
+      'A IA retornou seção diferente da seção atual do contexto.',
+    )
+  return sections[0]
+}
+
 function validateNumericClaims(
   sections: GroundedSection[],
   information: StructuredActivity,
@@ -101,18 +126,25 @@ export class ReportGenerationService {
     plan: ReportGenerationPlan,
     template: ReportTemplate,
   ): Promise<GeneratedReport> {
-    const sectionIds = plan.sections.map((section) => section.sectionId)
-    const names = plan.sections.map((section) => section.sectionName)
-    const schema: Record<string, unknown> = {
+    const timer = logger.startTimer('Structured report writing', {
+      templateId: template.metadata.id,
+      plannedSections: plan.sections.length,
+    })
+    const generatedSections: GeneratedReportSection[] = []
+    const groundedSections: GroundedSection[] = []
+    for (const section of plan.sections) {
+      const schema: Record<string, unknown> = {
       type: 'object',
       properties: {
         sections: {
           type: 'array',
+          minItems: 1,
+          maxItems: 1,
           items: {
             type: 'object',
             properties: {
-              sectionId: { type: 'string', enum: sectionIds },
-              name: { type: 'string', enum: names },
+              sectionId: { const: section.sectionId },
+              name: { const: section.sectionName },
               content: { type: 'string', minLength: 1 },
               usedEvidence: {
                 type: 'array',
@@ -128,11 +160,31 @@ export class ReportGenerationService {
       required: ['sections'],
       additionalProperties: false,
     }
-    const response = await this.generator.generateJson(
-      buildReportGenerationPrompt(information, plan, template),
-      schema,
-    )
-    const sections = parse(response, information)
+      const context = buildGenerationPromptContext(
+        information,
+        plan,
+        template,
+        section,
+        generatedSections,
+      )
+      const response = await this.generator.generateJson(
+        buildReportGenerationPrompt(context),
+        schema,
+      )
+      const grounded = parseSection(response, information, section)
+      groundedSections.push(grounded)
+      generatedSections.push({
+        id: grounded.sectionId,
+        name: grounded.name,
+        order: section.order,
+        content: grounded.content.trim(),
+        elements: [
+          { type: 'paragraph' as const, content: grounded.content.trim() },
+        ],
+      })
+    }
+    const sections = groundedSections
+    const sectionIds = plan.sections.map((section) => section.sectionId)
     const byId = new Map(
       plan.sections.map((section) => [section.sectionId, section]),
     )
@@ -163,20 +215,17 @@ export class ReportGenerationService {
         'A IA retornou as seções fora da ordem do modelo.',
       )
     validateNumericClaims(sections, information)
-    return {
+    const report: GeneratedReport = {
       id: randomUUID(),
       templateId: template.metadata.id,
       templateName: template.metadata.name,
       createdAt: new Date().toISOString(),
-      sections: sections.map((section) => ({
-        id: section.sectionId,
-        name: section.name,
-        order: byId.get(section.sectionId)!.order,
-        content: section.content.trim(),
-        elements: [
-          { type: 'paragraph' as const, content: section.content.trim() },
-        ],
-      })),
+      sections: generatedSections,
     }
+    timer.end('Structured report writing completed', {
+      reportId: report.id,
+      sections: report.sections.length,
+    })
+    return report
   }
 }

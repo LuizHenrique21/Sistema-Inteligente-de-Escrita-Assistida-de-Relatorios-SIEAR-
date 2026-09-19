@@ -47,6 +47,8 @@ Fluxo da integração:
 
 O Renderer não acessa o endpoint diretamente. URL, modelo e timeout ficam centralizados no serviço do Main Process. Outros serviços futuros devem seguir o mesmo limite arquitetural e ser expostos somente por métodos tipados no preload.
 
+O timeout padrão do Ollama é de 300 segundos para comportar análises estruturadas de documentos em modelos locais. Ele pode ser ajustado antes da inicialização com `SIEAR_OLLAMA_TIMEOUT_MS`, usando um valor em milissegundos.
+
 ## Extração estruturada
 
 A descrição livre é convertida no contrato `ReportInformation` pelo fluxo:
@@ -89,3 +91,33 @@ O `DocumentRenderer` recebe o `GeneratedReport` e o `ReportTemplate` oficial. A 
 `GeneratedReport + ReportTemplate → DocumentRenderer → reports:export-docx → DOCX`
 
 O Renderer React não acessa Node.js, filesystem, SQLite ou Ollama diretamente; toda comunicação externa passa pelo preload tipado com `contextIsolation: true` e `nodeIntegration: false`.
+
+## Logging e diagnóstico
+
+O Main Process utiliza a abstração `Logger` em `electron/infrastructure/logging`, com `electron-log` somente como transporte. Os níveis disponíveis são `debug`, `info`, `warn` e `error`. Em produção o padrão é `info`; defina `SIEAR_LOG_LEVEL=debug` antes de iniciar a aplicação para diagnóstico detalhado.
+
+Cada chamada IPC recebe `requestId` e `correlationId` próprios, propagados pelas operações assíncronas do Main Process. Entradas relevantes registram contexto, operação e duração sem armazenar prompts, respostas do modelo, conteúdo de documentos, textos de relatórios ou caminhos completos.
+
+Os arquivos são armazenados no diretório padrão de logs do Electron definido pelo `electron-log`. Cada arquivo possui limite de 5 MiB; ao atingir o limite, o transporte mantém o arquivo anterior conforme a política de rotação da biblioteca. Logs de desenvolvimento também aparecem no console.
+
+Campos sensíveis, incluindo `password`, `token`, `apiKey`, `authorization`, `secret`, `prompt`, `response`, `content`, `text`, documentos e caminhos, são substituídos por `[REDACTED]`. Erros técnicos e stacks ficam somente no log local do backend e nunca são enviados nas respostas IPC.
+
+## Benchmark de desempenho
+
+O baseline real de criação de modelos é executado separadamente da suíte comum:
+
+```powershell
+$env:SIEAR_BENCHMARK_DOCX='C:\caminho\modelo.docx'
+npm.cmd run benchmark:baseline
+```
+
+Resultados e metodologia estão documentados em `docs/performance-baseline.md`. Os relatórios detalhados são gravados localmente em `benchmark-results/` e não armazenam o conteúdo do DOCX.
+
+O pipeline de criação mantém checkpoints versionados no mesmo SQLite dos modelos. Uma tentativa posterior reutiliza somente etapas concluídas cujo hash do documento, versões de contrato/analyzer/prompt, modelo e configuração ainda sejam compatíveis. O benchmark específico de retomada é opt-in:
+
+```powershell
+$env:SIEAR_BENCHMARK_DOCX='C:\caminho\modelo.docx'
+npm.cmd run benchmark:checkpoint
+```
+
+Detalhes e baseline estão em `docs/pipeline-checkpoints.md`.
