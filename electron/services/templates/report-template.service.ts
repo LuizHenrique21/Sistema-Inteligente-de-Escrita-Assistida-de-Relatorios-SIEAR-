@@ -18,6 +18,43 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
+function optionalStringArray(value: unknown): boolean {
+  return value === undefined || isStringArray(value)
+}
+
+function validHierarchy(value: unknown): boolean {
+  if (value === undefined) return true
+  if (!Array.isArray(value)) return false
+  return value.every((node: unknown) => {
+    if (typeof node !== 'object' || node === null || Array.isArray(node))
+      return false
+    const item = node as Record<string, unknown>
+    return typeof item.sectionId === 'string' && validHierarchy(item.children)
+  })
+}
+
+function validActivityPatterns(value: unknown): boolean {
+  if (value === undefined) return true
+  if (!Array.isArray(value)) return false
+  return value.every((pattern: unknown) => {
+    if (
+      typeof pattern !== 'object' ||
+      pattern === null ||
+      Array.isArray(pattern)
+    )
+      return false
+    const item = pattern as Record<string, unknown>
+    return (
+      typeof item.namePattern === 'string' &&
+      isStringArray(item.sectionNames) &&
+      typeof item.order === 'number' &&
+      Number.isInteger(item.order) &&
+      typeof item.repeatable === 'boolean' &&
+      isStringArray(item.fieldIds)
+    )
+  })
+}
+
 export function isReportTemplate(value: unknown): value is ReportTemplate {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false
@@ -38,7 +75,22 @@ export function isReportTemplate(value: unknown): value is ReportTemplate {
       typeof section.description === 'string' &&
       typeof section.required === 'boolean' &&
       typeof section.order === 'number' &&
-      Number.isInteger(section.order)
+      Number.isInteger(section.order) &&
+      (section.parentSectionId === undefined ||
+        section.parentSectionId === null ||
+        typeof section.parentSectionId === 'string') &&
+      (section.level === undefined ||
+        (typeof section.level === 'number' &&
+          Number.isInteger(section.level) &&
+          section.level > 0)) &&
+      (section.repeatable === undefined ||
+        typeof section.repeatable === 'boolean') &&
+      (section.semanticPurpose === undefined ||
+        typeof section.semanticPurpose === 'string') &&
+      (section.writingStyle === undefined ||
+        typeof section.writingStyle === 'string') &&
+      (section.formattingStyle === undefined ||
+        typeof section.formattingStyle === 'string')
     )
   })
 
@@ -74,7 +126,19 @@ export function isReportTemplate(value: unknown): value is ReportTemplate {
     validFields &&
     isStringArray(template.writingRules) &&
     isStringArray(template.recommendedVocabulary) &&
-    isStringArray(template.forbiddenExpressions)
+    isStringArray(template.forbiddenExpressions) &&
+    (template.documentType === undefined ||
+      typeof template.documentType === 'string') &&
+    (template.status === undefined ||
+      template.status === 'draft' ||
+      template.status === 'confirmed') &&
+    optionalStringArray(template.semanticRules) &&
+    optionalStringArray(template.formattingRules) &&
+    optionalStringArray(template.requiredElements) &&
+    optionalStringArray(template.optionalElements) &&
+    optionalStringArray(template.repeatableElements) &&
+    validHierarchy(template.hierarchy) &&
+    validActivityPatterns(template.activityPatterns)
   )
 }
 
@@ -92,6 +156,12 @@ function validateTemplate(template: ReportTemplate): void {
   requireText(template.name, 'Nome')
   requireText(template.description, 'Descrição')
   requireText(template.objective, 'Objetivo')
+  if (template.status === 'draft') {
+    throw new ReportTemplateServiceError(
+      'VALIDATION_ERROR',
+      'O modelo precisa ser confirmado após a revisão antes de ser salvo.',
+    )
+  }
 
   if (template.sections.length === 0) {
     throw new ReportTemplateServiceError(
@@ -120,6 +190,31 @@ function validateTemplate(template: ReportTemplate): void {
     }
     sectionIds.add(section.id)
     sectionOrders.add(section.order)
+  }
+  const sectionById = new Map(
+    template.sections.map((section) => [section.id, section]),
+  )
+  for (const section of template.sections) {
+    const visited = new Set([section.id])
+    let parentId = section.parentSectionId
+    while (parentId) {
+      if (visited.has(parentId)) {
+        throw new ReportTemplateServiceError(
+          'VALIDATION_ERROR',
+          `A hierarquia da seção "${section.name}" contém um ciclo.`,
+        )
+      }
+      visited.add(parentId)
+      parentId = sectionById.get(parentId)?.parentSectionId
+    }
+  }
+  for (const section of template.sections) {
+    if (section.parentSectionId && !sectionIds.has(section.parentSectionId)) {
+      throw new ReportTemplateServiceError(
+        'VALIDATION_ERROR',
+        `A seção pai de "${section.name}" não existe.`,
+      )
+    }
   }
 
   const fieldIds = new Set<string>()
@@ -151,6 +246,9 @@ function normalizeTemplate(template: ReportTemplate): ReportTemplate {
         id: section.id.trim(),
         name: section.name.trim(),
         description: section.description.trim(),
+        semanticPurpose: section.semanticPurpose?.trim(),
+        writingStyle: section.writingStyle?.trim(),
+        formattingStyle: section.formattingStyle?.trim(),
       }))
       .sort((first, second) => first.order - second.order),
     fields: template.fields.map((field) => ({
@@ -160,6 +258,22 @@ function normalizeTemplate(template: ReportTemplate): ReportTemplate {
       label: field.label.trim(),
       description: field.description.trim(),
     })),
+    documentType: template.documentType?.trim(),
+    semanticRules: template.semanticRules
+      ?.map((rule) => rule.trim())
+      .filter(Boolean),
+    formattingRules: template.formattingRules
+      ?.map((rule) => rule.trim())
+      .filter(Boolean),
+    requiredElements: template.requiredElements
+      ?.map((item) => item.trim())
+      .filter(Boolean),
+    optionalElements: template.optionalElements
+      ?.map((item) => item.trim())
+      .filter(Boolean),
+    repeatableElements: template.repeatableElements
+      ?.map((item) => item.trim())
+      .filter(Boolean),
   }
 }
 

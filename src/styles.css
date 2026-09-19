@@ -577,3 +577,21 @@ pre {
     grid-column: auto;
   }
 }
+.import-progress {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto;
+  gap: 0.4rem 0.8rem;
+  align-items: center;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-color, #d8dee8);
+  border-radius: 0.75rem;
+  background: var(--surface-muted, #f7f9fc);
+}
+
+.import-progress progress {
+  width: 100%;
+}
+
+.import-progress span {
+  grid-column: 1 / -1;
+}

@@ -3,14 +3,7 @@ import type { GeneratedReport } from '../../src/types/generated-report'
 import { TECHNICAL_REPORT_TEMPLATE } from '../services/templates/default-report-templates'
 import { createReportGenerationHandler } from './report-generation.handler'
 
-const information = {
-  equipment: 'Notebook Dell',
-  activities: ['Substituição do HD'],
-  result: null,
-  problems: null,
-  duration: null,
-  observations: null,
-}
+const text = 'Troquei o HD do notebook Dell.'
 
 describe('contrato ai:generate-report', () => {
   it('busca o template confiável pelo ID', async () => {
@@ -21,18 +14,20 @@ describe('contrato ai:generate-report', () => {
       sections: [],
       createdAt: new Date().toISOString(),
     }
-    const generator = { generate: vi.fn().mockResolvedValue(report) }
+    const generator = {
+      generate: vi.fn().mockResolvedValue({ success: true, data: report }),
+    }
     const templates = {
       getById: vi.fn().mockResolvedValue(TECHNICAL_REPORT_TEMPLATE),
     }
     const handle = createReportGenerationHandler(generator, templates)
 
     await expect(
-      handle({ information, templateId: 'technical-report' }),
+      handle({ text, templateId: 'technical-report' }),
     ).resolves.toEqual({ success: true, data: report })
     expect(templates.getById).toHaveBeenCalledWith('technical-report')
     expect(generator.generate).toHaveBeenCalledWith(
-      information,
+      text,
       TECHNICAL_REPORT_TEMPLATE,
     )
   })
@@ -42,9 +37,7 @@ describe('contrato ai:generate-report', () => {
       { generate: vi.fn() },
       { getById: vi.fn() },
     )
-    await expect(
-      handle({ information: {}, templateId: '' }),
-    ).resolves.toMatchObject({
+    await expect(handle({ text: '', templateId: '' })).resolves.toMatchObject({
       success: false,
       error: { code: 'INVALID_REQUEST' },
     })
@@ -56,7 +49,7 @@ describe('contrato ai:generate-report', () => {
       { getById: vi.fn().mockResolvedValue(null) },
     )
     await expect(
-      handle({ information, templateId: 'missing' }),
+      handle({ text, templateId: 'missing' }),
     ).resolves.toMatchObject({
       success: false,
       error: { code: 'TEMPLATE_NOT_FOUND' },

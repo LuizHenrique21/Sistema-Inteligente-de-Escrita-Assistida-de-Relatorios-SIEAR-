@@ -6,6 +6,12 @@ export interface ReportSection {
   description: string
   required: boolean
   order: number
+  parentSectionId?: string | null
+  level?: number
+  repeatable?: boolean
+  semanticPurpose?: string
+  writingStyle?: string
+  formattingStyle?: string
 }
 
 export type ReportFieldType = 'text' | 'date' | 'number' | 'boolean'
@@ -32,6 +38,28 @@ export interface ReportTemplate {
   writingRules: string[]
   recommendedVocabulary: string[]
   forbiddenExpressions: string[]
+  documentType?: string
+  status?: 'draft' | 'confirmed'
+  hierarchy?: ReportHierarchyNode[]
+  activityPatterns?: ReportActivityPattern[]
+  semanticRules?: string[]
+  formattingRules?: string[]
+  requiredElements?: string[]
+  optionalElements?: string[]
+  repeatableElements?: string[]
+}
+
+export interface ReportHierarchyNode {
+  sectionId: string
+  children: ReportHierarchyNode[]
+}
+
+export interface ReportActivityPattern {
+  namePattern: string
+  sectionNames: string[]
+  order: number
+  repeatable: boolean
+  fieldIds: string[]
 }
 
 export type TemplateErrorCode =
