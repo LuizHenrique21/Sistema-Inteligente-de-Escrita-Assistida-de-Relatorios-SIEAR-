@@ -185,7 +185,7 @@ describe('WritingAnalysis — contexto e contratos', () => {
     const input = buildWritingAnalysisInput(f.document, f.structure)
     expect(input.sections[0]?.samples).toHaveLength(3)
     expect(JSON.stringify(input)).toContain('[DATA]')
-    expect(JSON.stringify(input)).toContain('[NÚMERO]')
+    expect(JSON.stringify(input)).toContain('[NUMERO]')
     expect(JSON.stringify(input)).not.toContain('pessoa@empresa.com')
   })
   it('seleciona global diverso e limitado, incluindo seções finais', () => {
@@ -615,6 +615,117 @@ describe('Consolidação e retomada', () => {
     }
     expect(validateUnit({ ...unit(), evidenceIds: [] }, schema)).toContainEqual(
       expect.objectContaining({ code: 'INVALID_ARRAY_LENGTH' }),
+    )
+  })
+
+  it('reprocessa somente o lote que falhou validação', async () => {
+    const largeDocument = structuredClone(document)
+    largeDocument.sections = Array.from({ length: 5 }, (_, index) => ({
+      id: `section-${index + 1}`,
+      title: `Seção ${index + 1}`,
+      level: 1,
+      order: index + 1,
+      content: Array.from({ length: 8 }, (_, paragraph) =>
+        `Texto técnico detalhado da seção ${index + 1}, parágrafo ${paragraph + 1}, com construção impessoal e terminologia de procedimento operacional. `.repeat(8),
+      ).join('\n'),
+      parentSectionId: null,
+    }))
+    const largeStructure: StructurePattern = {
+      ...structure,
+      sections: largeDocument.sections.map((section) => ({
+        name: section.title,
+        level: 1,
+        order: section.order,
+        purpose: `Analisar a escrita da ${section.title}.`,
+        required: true,
+        repeatable: false,
+        children: [],
+      })),
+      requiredElements: largeDocument.sections.map((section) => section.title),
+    }
+    const input = buildWritingAnalysisInput(largeDocument, largeStructure)
+    const plan = buildWritingAnalysisPlan(input)
+    expect(plan.batches.length).toBeGreaterThan(1)
+    const responses = [
+      JSON.stringify(validBatchPattern(plan.batches[0]!)),
+      '{}',
+      JSON.stringify(validBatchPattern(plan.batches[1]!)),
+      ...plan.batches
+        .slice(2)
+        .map((batch) => JSON.stringify(validBatchPattern(batch))),
+    ]
+    const generator = {
+      generateJson: vi.fn().mockImplementation(() => {
+        const next = responses.shift()
+        if (!next) throw new Error('Resposta inesperada.')
+        return Promise.resolve(next)
+      }),
+    }
+
+    await new WritingAnalysisService(generator).analyze(
+      largeDocument,
+      largeStructure,
+    )
+
+    expect(generator.generateJson).toHaveBeenCalledTimes(plan.batches.length + 1)
+    const prompts = generator.generateJson.mock.calls.map(
+      ([prompt]) => prompt as string,
+    )
+    expect(prompts[0]).toContain(plan.batches[0]!.batchId)
+    expect(prompts[1]).toContain(plan.batches[1]!.batchId)
+    expect(prompts[2]).toContain(plan.batches[1]!.batchId)
+  })
+
+  it('mantém golden fixture de estrutura, regras, evidências, estilos e terminologia', async () => {
+    const generator = {
+      generateJson: vi.fn().mockResolvedValue(responseFor(document, structure)),
+    }
+
+    const result = await new WritingAnalysisService(generator).analyze(
+      document,
+      structure,
+    )
+
+    expect(result).toMatchObject({
+      sectionStyles: [
+        {
+          sectionName: 'Descrição',
+          grammaticalPerson: 'terceira pessoa',
+          voice: 'predominantemente passiva',
+          verbTense: 'pretérito perfeito',
+          narrativeStyle: 'procedimental',
+          introductionPatterns: [
+            {
+              rule: 'Abrir a seção com afirmação técnica direta.',
+              evidence: [
+                {
+                  sectionName: 'Descrição',
+                  excerpt:
+                    'O procedimento foi executado conforme a especificação técnica.',
+                },
+              ],
+            },
+          ],
+        },
+        {
+          sectionName: 'Resultado',
+          narrativeStyle: 'conclusivo',
+        },
+      ],
+      terminology: [
+        {
+          rule: 'Empregar terminologia técnica contextual.',
+        },
+      ],
+      narrativePatterns: [
+        {
+          rule: 'Empregar terminologia técnica contextual.',
+        },
+      ],
+    })
+    expect(result.globalStyle.narrativeStyle).toContain('variável entre seções')
+    expect(result.recommendedPatterns[0]?.evidence[0]?.sectionName).toBe(
+      'Descrição',
     )
   })
 })

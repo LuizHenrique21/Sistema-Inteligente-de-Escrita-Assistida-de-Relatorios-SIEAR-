@@ -3,6 +3,7 @@ import type {
   WritingPattern,
 } from '../../../src/domain/templates'
 import type { DocumentRepresentation } from '../documents/types'
+import type { DocumentAnalysisContext } from '../documents/document-analysis-context'
 import type { StructuredTextGenerator } from './report-extraction.service'
 import type { PipelineCheckpointCoordinator } from '../templates/pipeline-checkpoint.coordinator'
 import { hashCheckpointResult } from '../templates/pipeline-checkpoint.hash'
@@ -106,7 +107,7 @@ export class WritingAnalysisService {
       throw new RangeError('maxRetries deve estar entre 0 e 2.')
   }
   async analyze(
-    document: DocumentRepresentation,
+    document: DocumentRepresentation | DocumentAnalysisContext,
     structure: StructurePattern,
     options: WritingAnalysisOptions = {},
   ): Promise<WritingPattern> {
@@ -294,5 +295,22 @@ export class WritingAnalysisService {
       'WRITING_ANALYSIS_RETRY_EXHAUSTED',
       issues,
     )
+  }
+
+  private async analyzeBatchWithRetry(
+    batch: WritingAnalysisPlanBatch,
+  ): Promise<BatchWritingPattern> {
+    try {
+      return await this.analyzeBatch(batch)
+    } catch (error: unknown) {
+      logger.warn('Writing analysis batch failed; retrying same batch only', {
+        batchId: batch.batchId,
+      })
+      try {
+        return await this.analyzeBatch(batch)
+      } catch {
+        throw error
+      }
+    }
   }
 }

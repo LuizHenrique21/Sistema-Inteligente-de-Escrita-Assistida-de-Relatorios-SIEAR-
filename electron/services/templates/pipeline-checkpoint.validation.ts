@@ -5,6 +5,7 @@ import type {
   WritingPattern,
 } from '../../../src/domain/templates'
 import type { DocumentRepresentation } from '../documents/types'
+import type { DocumentAnalysisContext } from '../documents/document-analysis-context'
 import { isSemanticPattern } from '../ai/semantic-analysis.service'
 import { isWritingPattern } from '../ai/writing-analysis.service'
 import { buildSemanticAnalysisInput } from '../ai/prompts/semantic-analysis.prompt'
@@ -73,7 +74,7 @@ export function isCheckpointFormatting(
 
 export function isCheckpointWriting(
   value: unknown,
-  document: DocumentRepresentation,
+  document: DocumentRepresentation | DocumentAnalysisContext,
   structure: StructurePattern,
 ): value is WritingPattern {
   return isWritingPattern(value, buildWritingAnalysisInput(document, structure))
@@ -81,7 +82,7 @@ export function isCheckpointWriting(
 
 export function isCheckpointSemantic(
   value: unknown,
-  document: DocumentRepresentation,
+  document: DocumentRepresentation | DocumentAnalysisContext,
   structure: StructurePattern,
   writing: WritingPattern,
 ): value is SemanticPattern {

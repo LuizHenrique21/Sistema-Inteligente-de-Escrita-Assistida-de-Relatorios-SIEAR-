@@ -4,7 +4,6 @@ import {
   SEMANTIC_PATTERN_STAGE_VERSION,
 } from '../ai/semantic-analysis.service'
 import {
-  WRITING_ANALYSIS_SECTION_BATCH_SIZE,
   WRITING_ANALYZER_VERSION,
   WRITING_PATTERN_STAGE_VERSION,
 } from '../ai/writing-analysis.service'

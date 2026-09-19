@@ -11,6 +11,7 @@ import type {
 } from '../../../src/domain/templates/formatting-pattern'
 import type { ReportTemplate } from '../../../src/domain/templates/report-template'
 import { getLogger } from '../../infrastructure/logging/logger.runtime'
+import { resolveCpuWorkerPolicy } from '../workers/cpu-worker-policy'
 
 const logger = getLogger('DocumentRenderer')
 
@@ -22,6 +23,38 @@ export const DOCUMENT_RENDERER_LIMITATIONS = [
   'PageBreakCount isolado não informa posições; somente quebras associadas a seções ou elementos são reproduzidas.',
   'SourceStyleId preserva o identificador, mas o contrato não contém a definição OOXML completa do estilo original.',
 ] as const
+
+export interface DocumentRendererOptions {
+  useWorker?: boolean
+  workerThresholdSections?: number
+  requestId?: string
+  signal?: AbortSignal
+  timeoutMs?: number
+}
+
+function renderWorkerThreshold(options: DocumentRendererOptions): number {
+  return (
+    options.workerThresholdSections ??
+    resolveCpuWorkerPolicy().renderingThresholdSections
+  )
+}
+
+function shouldUseRenderWorker(
+  report: GeneratedReport,
+  options: DocumentRendererOptions,
+): boolean {
+  if (options.useWorker === false) return false
+  if (options.useWorker === true) return true
+  const elementCount = report.sections.reduce(
+    (total, section) => total + (section.elements?.length ?? 0),
+    0,
+  )
+  const policy = resolveCpuWorkerPolicy()
+  return (
+    report.sections.length >= renderWorkerThreshold(options) ||
+    elementCount >= policy.renderingThresholdElements
+  )
+}
 
 function xml(value: string): string {
   return value
@@ -198,10 +231,27 @@ function headerFooterXml(
 }
 
 export class DocumentRenderer {
+  constructor(private readonly options: DocumentRendererOptions = {}) {}
+
   async render(
     report: GeneratedReport,
     template: ReportTemplate,
   ): Promise<Buffer> {
+    if (shouldUseRenderWorker(report, this.options)) {
+      const { runCpuWorkerTask } = await import(
+        '../workers/cpu-bound-worker.host'
+      )
+      const result = await runCpuWorkerTask(
+        'docx-render',
+        { report, template },
+        {
+          requestId: this.options.requestId,
+          signal: this.options.signal,
+          timeoutMs: this.options.timeoutMs ?? resolveCpuWorkerPolicy().timeoutMs,
+        },
+      )
+      return Buffer.from(result.value)
+    }
     const timer = logger.startTimer('Document render', {
       templateId: template.metadata.id,
       sections: report.sections.length,
