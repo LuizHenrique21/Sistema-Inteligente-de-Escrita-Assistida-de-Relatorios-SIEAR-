@@ -121,3 +121,20 @@ npm.cmd run benchmark:checkpoint
 ```
 
 Detalhes e baseline estão em `docs/pipeline-checkpoints.md`.
+
+## Escrita: análise global e por seção
+
+A WritingAnalysis analisa um perfil global e cada seção separadamente, valida
+evidências por ID e repara somente a unidade inválida (até dois retries).
+Checkpoints intermediários permitem retomar unidades concluídas. O modelo permanece
+`qwen3:8b`. Documentação: [redesenho e medições](docs/writing-analysis-redesign.md).
+
+Teste real opt-in, fora da suíte comum (cinco execuções por padrão):
+
+```powershell
+$env:SIEAR_WRITING_ANALYSIS_DOCX='C:\caminho\referencia.docx'
+$env:SIEAR_WRITING_RUNS='5'
+npm.cmd run test:integration:writing
+```
+
+O relatório seguro de estabilidade é gravado em `benchmark-results/`.

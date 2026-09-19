@@ -50,6 +50,33 @@ function template(id: string): ReportTemplate {
 }
 
 describe('TemplateCreationPipeline', () => {
+  it('publica progresso detalhado da escrita na etapa 3', async () => {
+    const messages: Array<{ step: number; message: string }> = []
+    const pipeline = new TemplateCreationPipeline(
+      { extract: vi.fn().mockResolvedValue(document) },
+      { analyze: vi.fn().mockResolvedValue(structure) },
+      {
+        analyze: async (_document, _structure, options) => {
+          options?.onProgress?.('Analisando padrão global...')
+          options?.onProgress?.('Analisando seção 1/2...')
+          options?.onProgress?.('Corrigindo seção 1/2...')
+          options?.onProgress?.('Consolidando padrão de escrita...')
+          return writing
+        },
+      },
+      { analyze: vi.fn().mockResolvedValue(semantic) },
+      { analyze: vi.fn().mockReturnValue(formatting) },
+      { build: vi.fn().mockReturnValue(template('progress')) },
+    )
+    await pipeline.execute('modelo.docx', (progress) => messages.push(progress))
+    expect(messages.filter((p) => p.step === 3).map((p) => p.message)).toEqual([
+      'Analisando padrão de escrita...',
+      'Analisando padrão global...',
+      'Analisando seção 1/2...',
+      'Corrigindo seção 1/2...',
+      'Consolidando padrão de escrita...',
+    ])
+  })
   it('executa todas as análises na ordem e publica as sete etapas', async () => {
     const calls: string[] = []
     const extractor = {
@@ -118,8 +145,9 @@ describe('TemplateCreationPipeline', () => {
       'Modelo pronto para revisão.',
     ])
     expect(writingAnalyzer.analyze).toHaveBeenCalledWith(
-      expect.objectContaining({ document, structure }),
+      document,
       structure,
+      expect.objectContaining({ onProgress: expect.any(Function) }),
     )
     expect(semanticAnalyzer.analyze).toHaveBeenCalledWith(
       expect.objectContaining({ document, structure }),
@@ -446,6 +474,7 @@ describe('TemplateCreationPipeline', () => {
     expect(writingAnalyzer.analyze).toHaveBeenCalledWith(
       expect.objectContaining({ document, structure: richStructure }),
       richStructure,
+      expect.objectContaining({ onProgress: expect.any(Function) }),
     )
     expect(semanticAnalyzer.analyze).toHaveBeenCalledWith(
       expect.objectContaining({ document, structure: richStructure }),

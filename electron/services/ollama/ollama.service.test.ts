@@ -17,6 +17,60 @@ afterEach(() => {
 })
 
 describe('OllamaService', () => {
+  it('aplica limites somente na chamada de escrita e propaga cancelamento', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ message: { content: '{}' } }), {
+          status: 200,
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+    await service.generateJson(
+      'Writing',
+      {},
+      {
+        numPredict: 1024,
+        temperature: 0,
+        think: false,
+        signal: controller.signal,
+      },
+    )
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      options: { num_predict: 1024, temperature: 0 },
+      think: false,
+    })
+    expect(request.signal?.aborted).toBe(false)
+    controller.abort()
+    expect(request.signal?.aborted).toBe(true)
+  })
+
+  it('publica métricas no observador da chamada e mantém o observador do serviço', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ message: { content: '{}' }, eval_count: 12 }),
+            { status: 200 },
+          ),
+        ),
+    )
+    const overall = vi.fn(),
+      local = vi.fn()
+    await new OllamaService({ onMetrics: overall }).generateJson(
+      'Writing',
+      {},
+      { onMetrics: local },
+    )
+    expect(local).toHaveBeenCalledWith(
+      expect.objectContaining({ generatedTokens: 12 }),
+    )
+    expect(overall).toHaveBeenCalledOnce()
+  })
   it('publica métricas de tokens quando o Ollama as fornece', async () => {
     const onMetrics = vi.fn()
     vi.stubGlobal(
@@ -82,12 +136,14 @@ describe('OllamaService', () => {
     const sensitiveResponse = 'SEGREDO-NA-RESPOSTA'
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({ message: { content: sensitiveResponse } }),
-          { status: 200 },
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ message: { content: sensitiveResponse } }),
+            { status: 200 },
+          ),
         ),
-      ),
     )
 
     await new OllamaService({ onMetrics }).generateJson(sensitivePrompt)
