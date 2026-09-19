@@ -1,6 +1,7 @@
 import type { AiErrorCode } from '../../../src/types/siear-api'
 import { getLogger } from '../../infrastructure/logging/logger.runtime'
 import { serializeError } from '../../infrastructure/logging/log-sanitizer'
+import type { WritingGenerationOptions } from '../ai/writing/writing-generation.options'
 
 const OLLAMA_BASE_URL = 'http://localhost:11434'
 export const DEFAULT_OLLAMA_MODEL = 'qwen3:8b'
@@ -89,13 +90,15 @@ export class OllamaService {
   generateJson(
     prompt: string,
     schema?: Record<string, unknown>,
+    options?: WritingGenerationOptions,
   ): Promise<string> {
-    return this.generate(prompt, schema ?? 'json')
+    return this.generate(prompt, schema ?? 'json', options)
   }
 
   async generate(
     prompt: string,
     format?: 'json' | Record<string, unknown>,
+    options?: WritingGenerationOptions,
   ): Promise<string> {
     let response: Response
     const startedAt = performance.now()
@@ -117,10 +120,29 @@ export class OllamaService {
           messages: [{ role: 'user', content: prompt }],
           stream: false,
           ...(format ? { format } : {}),
+          ...(options?.think !== undefined ? { think: options.think } : {}),
+          ...(options
+            ? {
+                options: {
+                  ...(options.numPredict !== undefined
+                    ? { num_predict: options.numPredict }
+                    : {}),
+                  ...(options.temperature !== undefined
+                    ? { temperature: options.temperature }
+                    : {}),
+                },
+              }
+            : {}),
         }),
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: options?.signal
+          ? AbortSignal.any([
+              options.signal,
+              AbortSignal.timeout(this.timeoutMs),
+            ])
+          : AbortSignal.timeout(this.timeoutMs),
       })
     } catch (error: unknown) {
+      if (options?.signal?.aborted) throw options.signal.reason
       const durationMs = Math.round(performance.now() - startedAt)
       if (
         error instanceof Error &&
@@ -235,6 +257,7 @@ export class OllamaService {
     }
     try {
       this.onMetrics?.(metrics)
+      options?.onMetrics?.(metrics)
     } catch {
       logger.warn('Ollama metrics observer failed', {
         operation: 'generate',

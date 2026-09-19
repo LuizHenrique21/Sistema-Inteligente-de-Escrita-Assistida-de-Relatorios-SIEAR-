@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:integration:writing": "vitest run --config vitest.writing-integration.config.ts",
     "benchmark:baseline": "vitest run --config vitest.baseline.config.ts",
     "benchmark:checkpoint": "vitest run --config vitest.checkpoint-benchmark.config.ts",
     "test:watch": "vitest",

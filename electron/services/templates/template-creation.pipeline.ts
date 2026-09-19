@@ -10,8 +10,13 @@ import type { TemplateImportProgress } from '../../../src/types/template-import'
 import type { ReportTemplateBuilderInput } from './report-template.builder'
 import { getLogger } from '../../infrastructure/logging/logger.runtime'
 import { serializeError } from '../../infrastructure/logging/log-sanitizer'
-import { combineCheckpointHashes, hashCheckpointResult, hashDocumentFile } from './pipeline-checkpoint.hash'
+import {
+  combineCheckpointHashes,
+  hashCheckpointResult,
+  hashDocumentFile,
+} from './pipeline-checkpoint.hash'
 import type { PipelineCheckpointCoordinator } from './pipeline-checkpoint.coordinator'
+import type { WritingAnalysisOptions } from '../ai/writing-analysis.service'
 import {
   checkpointResultValidators,
   isCheckpointSemantic,
@@ -32,6 +37,7 @@ export interface PipelineWritingAnalyzer {
   analyze(
     document: DocumentRepresentation,
     structure: StructurePattern,
+    options?: WritingAnalysisOptions,
   ): Promise<WritingPattern>
 }
 
@@ -190,7 +196,13 @@ export class TemplateCreationPipeline {
         documentStage.resultHash,
         structureStage.resultHash,
       ),
-      () => this.writingAnalyzer.analyze(document, structure),
+      () =>
+        this.writingAnalyzer.analyze(document, structure, {
+          onProgress: (message) => onProgress({ step: 3, message }),
+          ...(coordinator
+            ? { checkpoints: { coordinator, documentHash } }
+            : {}),
+        }),
       (value): value is WritingPattern =>
         isCheckpointWriting(value, document, structure),
     )
