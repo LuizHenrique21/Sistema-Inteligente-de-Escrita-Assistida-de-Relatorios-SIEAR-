@@ -150,7 +150,7 @@ describe('TemplateCreationPipeline', () => {
       expect.objectContaining({ onProgress: expect.any(Function) }),
     )
     expect(semanticAnalyzer.analyze).toHaveBeenCalledWith(
-      document,
+      expect.objectContaining({ document, structure }),
       structure,
       writing,
       expect.objectContaining({ onProgress: expect.any(Function) }),
@@ -469,19 +469,23 @@ describe('TemplateCreationPipeline', () => {
       progress.push(item.step),
     )
 
-    expect(structureAnalyzer.analyze).toHaveBeenCalledWith(document)
+    expect(structureAnalyzer.analyze).toHaveBeenCalledWith(
+      expect.objectContaining({ document }),
+    )
     expect(writingAnalyzer.analyze).toHaveBeenCalledWith(
-      document,
+      expect.objectContaining({ document, structure: richStructure }),
       richStructure,
       expect.objectContaining({ onProgress: expect.any(Function) }),
     )
     expect(semanticAnalyzer.analyze).toHaveBeenCalledWith(
-      document,
+      expect.objectContaining({ document, structure: richStructure }),
       richStructure,
       richWriting,
       expect.objectContaining({ onProgress: expect.any(Function) }),
     )
-    expect(formattingAnalyzer.analyze).toHaveBeenCalledWith(document)
+    expect(formattingAnalyzer.analyze).toHaveBeenCalledWith(
+      expect.objectContaining({ document, structure: richStructure }),
+    )
     expect(build).toHaveBeenCalledWith({
       document,
       structure: richStructure,

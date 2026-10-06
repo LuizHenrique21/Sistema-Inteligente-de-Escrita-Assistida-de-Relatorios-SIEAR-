@@ -219,6 +219,26 @@ describe('DocumentRenderer', () => {
     expect(documentXml).toContain('rIdImage1')
   })
 
+  it('gera o mesmo OOXML no main e no worker', async () => {
+    const mainBuffer = await new DocumentRenderer({ useWorker: false }).render(
+      report,
+      template,
+    )
+    const workerBuffer = await new DocumentRenderer({ useWorker: true }).render(
+      report,
+      template,
+    )
+    const mainZip = await JSZip.loadAsync(mainBuffer)
+    const workerZip = await JSZip.loadAsync(workerBuffer)
+
+    await expect(workerZip.file('word/document.xml')!.async('text')).resolves.toBe(
+      await mainZip.file('word/document.xml')!.async('text'),
+    )
+    await expect(workerZip.file('word/styles.xml')!.async('text')).resolves.toBe(
+      await mainZip.file('word/styles.xml')!.async('text'),
+    )
+  })
+
   it('reproduz seções, hierarquia, estilos e elementos do padrão original', async () => {
     const file = path.join(directory, 'gerado.docx')
     await writeFile(file, await new DocumentRenderer().render(report, template))

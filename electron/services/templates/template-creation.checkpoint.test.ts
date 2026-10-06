@@ -289,7 +289,7 @@ describe('TemplateCreationPipeline com checkpoint', () => {
     const first = harness()
     await first.pipeline.execute('modelo.docx')
     const changed = structuredClone(first.compatibility)
-    changed.writing.analyzerVersion = '2'
+    changed.writing.analyzerVersion = 'changed-writing-analyzer'
     const second = harness({
       repository: first.repository,
       compatibility: changed,

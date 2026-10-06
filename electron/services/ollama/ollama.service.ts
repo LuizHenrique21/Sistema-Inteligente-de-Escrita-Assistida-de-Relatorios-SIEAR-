@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { AiErrorCode } from '../../../src/types/siear-api'
 import { getLogger } from '../../infrastructure/logging/logger.runtime'
 import { serializeError } from '../../infrastructure/logging/log-sanitizer'
@@ -12,12 +13,15 @@ export interface OllamaServiceOptions {
   baseUrl?: string
   model?: string
   timeoutMs?: number
+  coordinator?: OllamaInferenceCoordinator
   onMetrics?: (metrics: OllamaGenerationMetrics) => void
 }
 
 export interface OllamaGenerationMetrics {
+  requestId: string
   model: string
   durationMs: number
+  queueWaitMs: number
   promptBytes: number
   responseBytes: number
   promptCharacters: number
@@ -27,6 +31,13 @@ export interface OllamaGenerationMetrics {
   promptEvaluationMs: number | null
   generationMs: number | null
   tokensPerSecond: number | null
+}
+
+export interface OllamaGenerateOptions {
+  requestId?: string
+  type?: string
+  priority?: OllamaInferencePriority
+  signal?: AbortSignal
 }
 
 function configuredTimeoutMs(): number {
@@ -74,12 +85,14 @@ export class OllamaService {
   private readonly baseUrl: string
   private readonly model: string
   private readonly timeoutMs: number
+  private readonly coordinator: OllamaInferenceCoordinator
   private readonly onMetrics?: (metrics: OllamaGenerationMetrics) => void
 
   constructor(options: OllamaServiceOptions = {}) {
     this.baseUrl = options.baseUrl ?? OLLAMA_BASE_URL
     this.model = options.model ?? DEFAULT_OLLAMA_MODEL
     this.timeoutMs = options.timeoutMs ?? configuredTimeoutMs()
+    this.coordinator = options.coordinator ?? defaultOllamaInferenceCoordinator
     this.onMetrics = options.onMetrics
   }
 
@@ -95,7 +108,7 @@ export class OllamaService {
     return this.generate(prompt, schema ?? 'json', options)
   }
 
-  async generate(
+  generate(
     prompt: string,
     format?: 'json' | Record<string, unknown>,
     options?: WritingGenerationOptions,
@@ -103,6 +116,7 @@ export class OllamaService {
     let response: Response
     const startedAt = performance.now()
     logger.info('Ollama request started', {
+      requestId,
       operation: 'generate',
       model: this.model,
       endpoint: '/api/chat',
@@ -149,6 +163,7 @@ export class OllamaService {
         (error.name === 'AbortError' || error.name === 'TimeoutError')
       ) {
         logger.error('Ollama request failed', {
+          requestId,
           durationMs,
           code: 'TIMEOUT',
           error: serializeError(error),
@@ -161,6 +176,7 @@ export class OllamaService {
 
       if (error instanceof TypeError) {
         logger.error('Ollama request failed', {
+          requestId,
           durationMs,
           code: 'OLLAMA_UNAVAILABLE',
           error: serializeError(error),
@@ -172,6 +188,7 @@ export class OllamaService {
       }
 
       logger.error('Ollama request failed', {
+        requestId,
         durationMs,
         code: 'UNEXPECTED_ERROR',
         error: serializeError(error),
@@ -184,6 +201,7 @@ export class OllamaService {
 
     if (response.status === 404) {
       logger.error('Ollama request failed', {
+        requestId,
         durationMs: Math.round(performance.now() - startedAt),
         code: 'MODEL_NOT_FOUND',
         status: response.status,
@@ -196,6 +214,7 @@ export class OllamaService {
 
     if (!response.ok) {
       logger.error('Ollama request failed', {
+        requestId,
         durationMs: Math.round(performance.now() - startedAt),
         code: 'HTTP_ERROR',
         status: response.status,
@@ -211,6 +230,7 @@ export class OllamaService {
       data = await response.json()
     } catch {
       logger.error('Ollama request failed', {
+        requestId,
         durationMs: Math.round(performance.now() - startedAt),
         code: 'INVALID_RESPONSE',
       })
@@ -222,6 +242,7 @@ export class OllamaService {
 
     if (!isOllamaChatResponse(data) || data.message.content.trim() === '') {
       logger.error('Ollama request failed', {
+        requestId,
         durationMs: Math.round(performance.now() - startedAt),
         code: 'INVALID_RESPONSE',
       })
@@ -242,9 +263,12 @@ export class OllamaService {
       generatedTokens !== null && generationMs !== null && generationMs > 0
         ? generatedTokens / (generationMs / 1000)
         : null
+    const queueWaitMs = this.coordinator.getMetrics().lastWaitMs
     const metrics: OllamaGenerationMetrics = {
+      requestId,
       model: this.model,
       durationMs,
+      queueWaitMs: queueWaitMs === null ? 0 : Math.round(queueWaitMs),
       promptBytes: Buffer.byteLength(prompt, 'utf8'),
       responseBytes: Buffer.byteLength(data.message.content, 'utf8'),
       promptCharacters: prompt.length,
@@ -265,6 +289,7 @@ export class OllamaService {
       })
     }
     logger.info('Ollama request completed', {
+      requestId,
       model: this.model,
       durationMs,
       responseLength: data.message.content.length,

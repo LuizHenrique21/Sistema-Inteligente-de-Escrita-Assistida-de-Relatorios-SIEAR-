@@ -75,7 +75,7 @@ export function isCheckpointFormatting(
 
 export function isCheckpointWriting(
   value: unknown,
-  document: DocumentRepresentation,
+  document: DocumentRepresentation | DocumentAnalysisContext,
   structure: StructurePattern,
 ): value is WritingPattern {
   return isWritingPattern(value, buildWritingAnalysisInput(document, structure))
@@ -83,7 +83,7 @@ export function isCheckpointWriting(
 
 export function isCheckpointSemantic(
   value: unknown,
-  document: DocumentRepresentation,
+  document: DocumentRepresentation | DocumentAnalysisContext,
   structure: StructurePattern,
   writing: WritingPattern,
 ): value is SemanticPattern {

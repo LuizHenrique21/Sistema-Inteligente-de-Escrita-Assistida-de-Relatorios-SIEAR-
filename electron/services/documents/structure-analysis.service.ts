@@ -9,6 +9,10 @@ import {
   buildStructureSemanticSummary,
 } from '../ai/prompts/structure-analysis.prompt'
 import type { DocumentRepresentation, ExtractedSection } from './types'
+import {
+  asDocumentAnalysisContext,
+  type DocumentAnalysisContext,
+} from './document-analysis-context'
 import type {
   ActivityPattern,
   FieldEvidence,
@@ -232,9 +236,10 @@ function buildSectionPatterns(sections: ExtractedSection[]): {
 }
 
 function activityPatterns(
-  document: DocumentRepresentation,
+  context: DocumentAnalysisContext,
   fields: StructureField[],
 ): ActivityPattern[] {
+  const document = context.document
   const groups = new Map<string, ExtractedSection[]>()
   for (const section of document.sections) {
     const key = canonicalActivity(section.title)
@@ -278,9 +283,8 @@ function activityPatterns(
         roots.every((root) => {
           const sectionIds = descendantsOf(root.id)
           return field.evidence.some((evidence) => {
-            const sectionId = document.paragraphs.find(
-              (paragraph) => paragraph.id === evidence.elementId,
-            )?.sectionId
+            const sectionId = context.paragraphById.get(evidence.elementId)
+              ?.sectionId
             return (
               sectionId !== null &&
               sectionId !== undefined &&
@@ -399,7 +403,11 @@ function validSemantic(
 export class StructureAnalysisService {
   constructor(private readonly semanticGenerator?: StructuredTextGenerator) {}
 
-  async analyze(document: DocumentRepresentation): Promise<StructurePattern> {
+  async analyze(
+    source: DocumentRepresentation | DocumentAnalysisContext,
+  ): Promise<StructurePattern> {
+    const context = asDocumentAnalysisContext(source)
+    const document = context.document
     const timer = logger.startTimer('Structure analysis')
     logger.info('Structure analysis started', {
       sourceSections: document.sections.length,
@@ -408,7 +416,7 @@ export class StructureAnalysisService {
     const { flat: sections, hierarchy } = buildSectionPatterns(
       document.sections,
     )
-    const activities = activityPatterns(document, fields)
+    const activities = activityPatterns(context, fields)
     const title =
       document.metadata.title ??
       document.headings.find(

@@ -8,6 +8,10 @@ import type { ReportTemplate } from '../../../src/domain/templates/report-templa
 import type { DocumentRepresentation } from '../documents/types'
 import type { TemplateImportProgress } from '../../../src/types/template-import'
 import type { ReportTemplateBuilderInput } from './report-template.builder'
+import {
+  createDocumentAnalysisContext,
+  type DocumentAnalysisContext,
+} from '../documents/document-analysis-context'
 import { getLogger } from '../../infrastructure/logging/logger.runtime'
 import { serializeError } from '../../infrastructure/logging/log-sanitizer'
 import {
@@ -31,12 +35,14 @@ export interface PipelineDocumentExtractor {
 }
 
 export interface PipelineStructureAnalyzer {
-  analyze(document: DocumentRepresentation): Promise<StructurePattern>
+  analyze(
+    document: DocumentRepresentation | DocumentAnalysisContext,
+  ): Promise<StructurePattern>
 }
 
 export interface PipelineWritingAnalyzer {
   analyze(
-    document: DocumentRepresentation,
+    document: DocumentRepresentation | DocumentAnalysisContext,
     structure: StructurePattern,
     options?: WritingAnalysisOptions,
   ): Promise<WritingPattern>
@@ -44,7 +50,7 @@ export interface PipelineWritingAnalyzer {
 
 export interface PipelineSemanticAnalyzer {
   analyze(
-    document: DocumentRepresentation,
+    document: DocumentRepresentation | DocumentAnalysisContext,
     structure: StructurePattern,
     writing: WritingPattern,
     options?: SemanticAnalysisOptions,
@@ -52,7 +58,9 @@ export interface PipelineSemanticAnalyzer {
 }
 
 export interface PipelineFormattingAnalyzer {
-  analyze(document: DocumentRepresentation): FormattingPattern
+  analyze(
+    document: DocumentRepresentation | DocumentAnalysisContext,
+  ): FormattingPattern | Promise<FormattingPattern>
 }
 
 export interface PipelineTemplateBuilder {
@@ -164,6 +172,7 @@ export class TemplateCreationPipeline {
       checkpointResultValidators.extraction,
     )
     const document = documentStage.value
+    const extractionContext = createDocumentAnalysisContext(document)
     extractionTimer.end('Document extraction completed', {
       sections: document.sections?.length ?? 0,
       paragraphs: document.paragraphs?.length ?? 0,
@@ -178,10 +187,13 @@ export class TemplateCreationPipeline {
       'structure',
       documentHash,
       combineCheckpointHashes(documentStage.resultHash),
-      () => this.structureAnalyzer.analyze(document),
+      () => this.structureAnalyzer.analyze(extractionContext),
       checkpointResultValidators.structure,
     )
     const structure = structureStage.value
+    const analysisContext = createDocumentAnalysisContext(document, {
+      structure,
+    })
     structureTimer.end('Structure analysis completed', {
       sections: structure.sections?.length ?? 0,
       fields: structure.fields?.length ?? 0,
@@ -250,7 +262,7 @@ export class TemplateCreationPipeline {
       'formatting',
       documentHash,
       combineCheckpointHashes(documentStage.resultHash),
-      () => this.formattingAnalyzer.analyze(document),
+      () => this.formattingAnalyzer.analyze(analysisContext),
       checkpointResultValidators.formatting,
     )
     const formatting = formattingStage.value

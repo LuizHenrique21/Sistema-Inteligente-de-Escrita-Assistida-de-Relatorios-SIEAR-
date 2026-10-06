@@ -50,6 +50,7 @@ import type {
   WritingPattern,
 } from '../../../src/domain/templates'
 import type { DocumentRepresentation } from '../documents/types'
+import type { DocumentAnalysisContext } from '../documents/document-analysis-context'
 
 const ROOT_KEYS = [
   'documentType',
@@ -524,7 +525,7 @@ class LegacySemanticAnalysisService {
   constructor(private readonly generator: StructuredTextGenerator) {}
 
   async analyze(
-    document: DocumentRepresentation,
+    document: DocumentRepresentation | DocumentAnalysisContext,
     structure: StructurePattern,
     writing: WritingPattern,
   ): Promise<SemanticPattern> {

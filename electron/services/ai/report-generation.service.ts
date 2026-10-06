@@ -115,6 +115,23 @@ function unsupportedNumbers(
   ]
 }
 
+function parseSection(
+  response: string,
+  information: StructuredActivity,
+  section: PlannedReportSection,
+): GroundedSection {
+  const sections = parse(response, information)
+  if (
+    sections.length !== 1 ||
+    sections[0]?.sectionId !== section.sectionId ||
+    sections[0].name !== section.sectionName
+  )
+    throw new ReportGenerationServiceError(
+      'A IA retornou seção diferente da seção atual do contexto.',
+    )
+  return sections[0]
+}
+
 function validateNumericClaims(
   sections: GroundedSection[],
   information: StructuredActivity,
