@@ -2,7 +2,6 @@ import { app, BrowserWindow } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { registerAiIpc } from './ipc/ai.ipc'
-import { registerAppIpc } from './ipc/app.ipc'
 import { registerTemplatesIpc } from './ipc/templates.ipc'
 import { getLogger } from './infrastructure/logging/logger.runtime'
 import { serializeError } from './infrastructure/logging/log-sanitizer'
@@ -37,7 +36,10 @@ function createWindow(): void {
     },
   })
 
-  window.once('ready-to-show', () => window.show())
+  window.once('ready-to-show', () => {
+    window.maximize()
+    window.show()
+  })
 
   if (process.env.VITE_DEV_SERVER_URL) {
     void window.loadURL(process.env.VITE_DEV_SERVER_URL)
@@ -55,7 +57,6 @@ app.whenReady().then(() => {
     electronVersion: process.versions.electron,
     nodeVersion: process.versions.node,
   })
-  registerAppIpc()
   const templates = registerTemplatesIpc()
   registerAiIpc(templates.service)
   createWindow()

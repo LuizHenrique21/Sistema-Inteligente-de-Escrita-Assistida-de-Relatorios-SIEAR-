@@ -1,0 +1,293 @@
+.card {
+  padding: clamp(24px, 4vw, 38px);
+  border: 1px solid rgba(31, 77, 55, 0.1);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 16px 48px rgba(21, 55, 40, 0.08);
+}
+.heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 27px;
+}
+.heading h2 {
+  margin: 7px 0 0;
+  color: #172b22;
+  font-size: clamp(1.55rem, 3vw, 2.1rem);
+}
+.stepLabel {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  color: #237253;
+  background: #eaf7ef;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+.card label {
+  display: block;
+  margin-bottom: 9px;
+  color: #274538;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.card select,
+.card textarea {
+  width: 100%;
+  color: #17231e;
+  font: inherit;
+}
+.card select {
+  min-height: 47px;
+  margin-bottom: 12px;
+  padding: 11px 43px 11px 13px;
+  border: 1px solid #c8d7ce;
+  border-radius: 10px;
+  appearance: none;
+  background-color: #fbfdfc;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%23245c43' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right 14px center;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+.card textarea {
+  min-height: 194px;
+  margin: 8px 0;
+  padding: 14px 16px;
+  resize: vertical;
+  border: 1px solid #c8d7ce;
+  border-radius: 13px;
+  background: #fcfdfc;
+  line-height: 1.55;
+}
+.card select:focus,
+.card textarea:focus {
+  border-color: #31704f;
+  outline: 3px solid rgba(49, 112, 79, 0.12);
+}
+.card select:hover:not(:disabled) {
+  border-color: #74a78c;
+  background-color: #f4faf6;
+}
+.card select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+.fieldHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+}
+.fieldHeading label {
+  margin: 0;
+}
+.fieldHeading span,
+.help,
+.actionHint {
+  color: #72837b;
+  font-size: 0.76rem;
+}
+.help {
+  margin: 0;
+  line-height: 1.5;
+}
+.actions {
+  display: flex;
+  gap: 11px;
+  margin-top: 24px;
+}
+.actions button {
+  width: auto;
+  min-height: 46px;
+  padding: 12px 17px;
+  border: 0;
+  border-radius: 11px;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+.primaryButton {
+  color: #fff;
+  background: #126849;
+  box-shadow: 0 8px 16px rgba(14, 104, 72, 0.18);
+}
+
+.primaryButton:hover:not(:disabled) {
+  color: #fff;
+  background: #0c533a;
+}
+.secondaryButton {
+  border: 1px solid #b8ccbf !important;
+  color: #245c43;
+  background: #fff;
+}
+
+.secondaryButton:hover:not(:disabled) {
+  color: #fff;
+  background: #245c43;
+}
+.actions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.actionHint {
+  margin: 10px 0 0;
+}
+.emptyTemplate {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px dashed #a9c6b5;
+  border-radius: 12px;
+  color: #416252;
+  background: #f5fbf7;
+}
+.emptyTemplate strong {
+  color: #204837;
+}
+.emptyTemplate span {
+  font-size: 0.85rem;
+}
+.emptyTemplate button {
+  width: fit-content;
+  margin-top: 5px;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  background: #176247;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.templateSummary {
+  display: grid;
+  grid-template-columns: 33px minmax(0, 1fr);
+  gap: 10px;
+  margin: 0;
+  padding: 13px;
+  border: 1px solid #d6e7dc;
+  border-radius: 12px;
+  color: #486459;
+  background: #f3f9f5;
+}
+.templateIcon {
+  display: grid;
+  width: 33px;
+  height: 33px;
+  place-items: center;
+  border-radius: 9px;
+  color: #166044;
+  background: #dcefe2;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+.templateSummary strong,
+.templateSummary span,
+.templateSummary small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.templateSummary strong {
+  color: #174b35;
+  font-size: 0.86rem;
+}
+.templateSummary span {
+  font-size: 0.76rem;
+}
+.templateSummary small {
+  color: #688074;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+.error {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #efc5c5;
+  border-radius: 12px;
+  color: #842828;
+  background: #fff2f2;
+}
+.error strong {
+  display: block;
+  margin-bottom: 6px;
+}
+.error p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+:global([data-theme='dark']) .card {
+  border-color: #2b4538;
+  background: #17231d;
+  box-shadow: none;
+}
+:global([data-theme='dark']) .heading h2,
+:global([data-theme='dark']) .card label {
+  color: #e0f0e6;
+}
+:global([data-theme='dark']) .stepLabel {
+  color: #aadbc0;
+  background: #214535;
+}
+:global([data-theme='dark']) .card select,
+:global([data-theme='dark']) .card textarea {
+  border-color: #395747;
+  color: #e3f0e8;
+  background: #111b16;
+}
+:global([data-theme='dark']) .card select {
+  background-color: #111b16;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%23b7e3c6' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+:global([data-theme='dark']) .card select:hover:not(:disabled) {
+  border-color: #5d9474;
+  background-color: #16251d;
+}
+:global([data-theme='dark']) .help,
+:global([data-theme='dark']) .fieldHeading span,
+:global([data-theme='dark']) .actionHint {
+  color: #9ab3a4;
+}
+:global([data-theme='dark']) .templateSummary {
+  border-color: #345442;
+  color: #b9d4c3;
+  background: #1a2c23;
+}
+:global([data-theme='dark']) .templateSummary strong {
+  color: #d7ebdf;
+}
+:global([data-theme='dark']) .templateIcon {
+  color: #c3ead2;
+  background: #294b3a;
+}
+:global([data-theme='dark']) .secondaryButton {
+  border-color: #476957 !important;
+  color: #c6ead4;
+  background: #1b2b22;
+}
+:global([data-theme='dark']) .emptyTemplate {
+  border-color: #47715b;
+  color: #b6d1c0;
+  background: #182a21;
+}
+@media (max-width: 650px) {
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .actions button {
+    width: 100%;
+  }
+}

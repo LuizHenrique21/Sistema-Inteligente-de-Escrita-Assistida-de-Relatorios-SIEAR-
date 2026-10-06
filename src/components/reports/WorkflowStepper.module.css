@@ -1,0 +1,71 @@
+.workflow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 31px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 12px;
+  color: #7b8b83;
+  background: rgba(235, 240, 237, 0.7);
+}
+.number {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #becdc4;
+  border-radius: 50%;
+  color: #65776d;
+  background: #fff;
+  font-size: 0.77rem;
+  font-weight: 800;
+}
+.step strong {
+  display: block;
+  overflow: hidden;
+  color: inherit;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.step small {
+  display: block;
+  overflow: hidden;
+  color: inherit;
+  font-size: 0.65rem;
+  opacity: 0.82;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.active {
+  color: #12583e;
+  background: #e0f3e8;
+}
+.active .number {
+  border-color: #16835c;
+  color: #fff;
+  background: #16835c;
+}
+.completed {
+  color: #1c6a4b;
+  background: #eaf5ed;
+}
+.completed .number {
+  border-color: #62af86;
+  color: #fff;
+  background: #62af86;
+}
+@media (max-width: 650px) {
+  .workflow {
+    grid-template-columns: 1fr 1fr;
+  }
+}

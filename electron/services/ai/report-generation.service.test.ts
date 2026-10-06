@@ -29,28 +29,27 @@ const information: StructuredActivity = {
 const plan = new ReportGenerationPlanner().plan(information, template)
 const section = plan.sections[0]!
 
-function response(content: string, usedEvidence = ['Troquei o HD']): string {
+function response(
+  content: string,
+  usedEvidenceIds = ['evidence-002'],
+): string {
   return JSON.stringify({
-    sections: [
-      {
-        sectionId: section.sectionId,
-        name: section.sectionName,
-        content,
-        usedEvidence,
-      },
-    ],
+    sectionId: section.sectionId,
+    name: section.sectionName,
+    content,
+    usedEvidenceIds,
   })
 }
 
 describe('ReportGenerationService', () => {
-  it('preenche a estrutura determinada pelo plano usando evidências fornecidas', async () => {
+  it('gera uma seção isolada com IDs de evidência permitidos', async () => {
     const generator = {
       generateJson: vi
         .fn()
         .mockResolvedValue(
           response('Foi realizada a substituição do HD no notebook.', [
-            'Troquei o HD',
-            'notebook',
+            'evidence-002',
+            'evidence-001',
           ]),
         ),
     }
@@ -59,67 +58,95 @@ describe('ReportGenerationService', () => {
       plan,
       template,
     )
-    expect(report).toMatchObject({
-      templateId: 'template',
-      templateName: 'Modelo técnico',
-    })
     expect(report.sections[0]).toMatchObject({
       id: section.sectionId,
       name: 'Execução',
       order: 2,
-      elements: [
-        {
-          type: 'paragraph',
-          content: 'Foi realizada a substituição do HD no notebook.',
-        },
-      ],
+      content: 'Foi realizada a substituição do HD no notebook.',
     })
     const prompt = generator.generateJson.mock.calls[0]?.[0] as string
-    expect(prompt).toContain('StructuredActivity é a única fonte de fatos')
-    expect(prompt).toContain('terceira pessoa')
-    expect(prompt).toContain('A execução antecede o resultado.')
+    expect(prompt).toContain('Os fatos vêm exclusivamente de FACTS e ACTIVITIES')
+    expect(prompt).toContain('evidence-002')
     expect(prompt).not.toContain('predominantFont')
   })
 
-  it('rejeita evidência e número não fornecidos', async () => {
+  it('rejeita IDs de evidência não permitidos', async () => {
     await expect(
       new ReportGenerationService({
         generateJson: vi
           .fn()
-          .mockResolvedValue(
-            response('Procedimento realizado.', ['teste inexistente']),
-          ),
+          .mockResolvedValue(response('Procedimento realizado.', ['inventada'])),
       }).generate(information, plan, template),
     ).rejects.toMatchObject({ code: 'INVALID_MODEL_RESPONSE' })
-    await expect(
-      new ReportGenerationService({
-        generateJson: vi
-          .fn()
-          .mockResolvedValue(response('Foram realizados 3 testes.')),
-      }).generate(information, plan, template),
-    ).rejects.toThrow('número')
   })
 
-  it('rejeita seção fora do plano e seção obrigatória ausente', async () => {
-    const unknown = JSON.stringify({
-      sections: [
-        {
-          sectionId: 'inventada',
-          name: 'Inventada',
-          content: 'Texto.',
-          usedEvidence: ['Troquei o HD'],
-        },
-      ],
-    })
+  it('corrige localmente uma seção inválida sem repetir as demais', async () => {
+    const generator = {
+      generateJson: vi
+        .fn()
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            sectionId: 'inventada',
+            name: 'Inventada',
+            content: 'Texto.',
+            usedEvidenceIds: ['evidence-002'],
+          }),
+        )
+        .mockResolvedValueOnce(response('Foi realizada a substituição do HD.')),
+    }
+    const report = await new ReportGenerationService(generator).generate(
+      information,
+      plan,
+      template,
+    )
+    expect(report.sections).toHaveLength(1)
+    expect(generator.generateJson).toHaveBeenCalledTimes(2)
+    expect(generator.generateJson.mock.calls[1]?.[0]).toContain(
+      'Corrija somente o JSON anterior',
+    )
+  })
+
+  it('corrige um número sem evidência antes de falhar a geração', async () => {
+    const generator = {
+      generateJson: vi
+        .fn()
+        .mockResolvedValueOnce(response('Foram realizados 3 testes.'))
+        .mockResolvedValueOnce(response('Foi realizada a substituição do HD.')),
+    }
+
     await expect(
-      new ReportGenerationService({
-        generateJson: vi.fn().mockResolvedValue(unknown),
-      }).generate(information, plan, template),
-    ).rejects.toThrow('inexistentes')
-    await expect(
-      new ReportGenerationService({
-        generateJson: vi.fn().mockResolvedValue('{"sections":[]}'),
-      }).generate(information, plan, template),
-    ).rejects.toThrow('plano de geração')
+      new ReportGenerationService(generator).generate(information, plan, template),
+    ).resolves.toMatchObject({ sections: [expect.any(Object)] })
+    expect(generator.generateJson).toHaveBeenCalledTimes(2)
+    expect(generator.generateJson.mock.calls[1]?.[0]).toContain(
+      'Remova qualquer número',
+    )
+  })
+
+  it('aceita marcadores numéricos de lista como formatação', async () => {
+    const report = await new ReportGenerationService({
+      generateJson: vi.fn().mockResolvedValue(
+        response('1. Foi realizada a substituição do HD.'),
+      ),
+    }).generate(information, plan, template)
+
+    expect(report.sections).toHaveLength(1)
+  })
+
+  it('usa evidências literais após uma correção numérica sem sucesso', async () => {
+    const generator = {
+      generateJson: vi
+        .fn()
+        .mockResolvedValue(response('Foram realizados 3 testes.')),
+    }
+
+    const report = await new ReportGenerationService(generator).generate(
+      information,
+      plan,
+      template,
+    )
+
+    expect(generator.generateJson).toHaveBeenCalledTimes(2)
+    expect(report.sections[0]?.content).toContain('Troquei o HD')
   })
 })

@@ -79,6 +79,36 @@ describe('ReportGenerationPlanner', () => {
       plan.templateContext.formattingPattern.documentStyle.margins,
     ).toEqual(template.formattingPattern.documentStyle.margins)
   })
+
+  it('selects one report when a template is a sprint collection', () => {
+    const sprint = (name: string, order: number) => ({
+      name,
+      level: 1,
+      order,
+      purpose: 'Register one sprint.',
+      required: true,
+      repeatable: true,
+      children: [],
+    })
+    const sprintTemplate = createRichReportTemplate('sprints')
+    sprintTemplate.structurePattern.hierarchy = [
+      sprint('Sprint 0 - Setup Inicial', 1),
+      sprint('Sprint 1', 2),
+      sprint('Sprint 2', 3),
+    ]
+    sprintTemplate.structurePattern.sections = [
+      ...sprintTemplate.structurePattern.hierarchy,
+    ]
+    sprintTemplate.semanticPattern.sections = []
+
+    const plan = new ReportGenerationPlanner().plan(incomplete, sprintTemplate)
+
+    expect(plan.sections).toHaveLength(1)
+    expect(plan.sections[0]).toMatchObject({
+      sectionName: 'Sprint',
+      sectionId: expect.stringContaining('sprint0setupinicial'),
+    })
+  })
 })
 
 describe('ReportGenerationPipeline', () => {

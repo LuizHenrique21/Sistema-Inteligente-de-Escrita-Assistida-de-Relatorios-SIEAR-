@@ -38,6 +38,26 @@ function safeError(error: unknown): SafeCheckpointError {
   return { name, code }
 }
 
+function checkpointRepositoryFailure(error: unknown): {
+  repositoryErrorName: string
+  repositoryErrorCode: string | null
+} {
+  const name = error instanceof Error ? error.name : 'UnknownError'
+  const rawCode =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? error.code
+      : null
+  return {
+    repositoryErrorName: /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(name)
+      ? name
+      : 'Error',
+    repositoryErrorCode:
+      typeof rawCode === 'string' && /^[A-Z0-9_-]{1,64}$/.test(rawCode)
+        ? rawCode
+        : null,
+  }
+}
+
 function sameIdentity(
   checkpoint: PipelineCheckpoint,
   identity: PipelineCheckpointIdentity,
@@ -153,9 +173,10 @@ export class PipelineCheckpointCoordinator {
   private async load(id: string): Promise<PipelineCheckpoint | null> {
     try {
       return await this.repository.getById(id)
-    } catch {
+    } catch (error) {
       logger.warn('Pipeline checkpoint could not be read', {
         checkpointId: id,
+        ...checkpointRepositoryFailure(error),
       })
       return null
     }
@@ -164,11 +185,12 @@ export class PipelineCheckpointCoordinator {
   private async persist(checkpoint: PipelineCheckpoint): Promise<void> {
     try {
       await this.repository.save(checkpoint)
-    } catch {
+    } catch (error) {
       logger.warn('Pipeline checkpoint could not be persisted', {
         checkpointId: checkpoint.id,
         stage: checkpoint.stage,
         status: checkpoint.status,
+        ...checkpointRepositoryFailure(error),
       })
     }
   }
@@ -179,10 +201,11 @@ export class PipelineCheckpointCoordinator {
   ): Promise<void> {
     try {
       await this.repository.delete(id)
-    } catch {
+    } catch (error) {
       logger.warn('Invalid pipeline checkpoint could not be removed', {
         checkpointId: id,
         stage,
+        ...checkpointRepositoryFailure(error),
       })
     }
   }

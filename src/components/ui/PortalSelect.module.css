@@ -1,0 +1,133 @@
+.root {
+  position: relative;
+  margin-bottom: 12px;
+}
+.trigger {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid #c8d7ce;
+  border-radius: 10px;
+  color: #1b392b;
+  background: #fbfdfc;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+.trigger:hover:not(:disabled) {
+  border-color: #74a78c;
+  background-color: #f4faf6;
+  color: #1b392b;
+}
+
+.trigger:hover {
+  color: #1b392b;
+}
+
+.trigger:focus-visible {
+  border-color: #31704f;
+  outline: 3px solid rgba(49, 112, 79, 0.12);
+}
+.trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+.value {
+  overflow: hidden;
+  font-size: 0.88rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-right: 2px solid #245c43;
+  border-bottom: 2px solid #245c43;
+  transform: translateY(-2px) rotate(45deg);
+}
+.menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid #bcd2c4;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 16px 32px rgba(22, 58, 42, 0.18);
+}
+.option,
+.optionSelected {
+  display: grid;
+  width: 100%;
+  gap: 3px;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 8px;
+  color: #294c3b;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.option:hover,
+.option:focus-visible {
+  color: #1a573d;
+  background: #eaf6ee;
+  outline: 0;
+}
+.optionSelected {
+  color: #f6fffa;
+  background: #176247;
+}
+.option strong {
+  font-size: 0.84rem;
+}
+.option small,
+.optionSelected small {
+  overflow: hidden;
+  color: inherit;
+  font-size: 0.72rem;
+  opacity: 0.74;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:global([data-theme='dark']) .trigger {
+  border-color: #395747;
+  color: #e3f0e8;
+  background: #111b16;
+}
+:global([data-theme='dark']) .trigger:hover:not(:disabled) {
+  border-color: #5d9474;
+  background: #16251d;
+}
+:global([data-theme='dark']) .chevron {
+  border-color: #b7e3c6;
+}
+:global([data-theme='dark']) .menu {
+  border-color: #385845;
+  background: #1a2b22;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.34);
+}
+:global([data-theme='dark']) .option {
+  color: #d4e8db;
+}
+:global([data-theme='dark']) .option:hover,
+:global([data-theme='dark']) .option:focus-visible {
+  color: #effaf3;
+  background: #294634;
+}

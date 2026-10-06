@@ -1,57 +1,75 @@
+import type { PlannedReportSection, StructuredActivity } from '../../../../src/types/generated-report'
 import type { ReportTemplate } from '../../../../src/domain/templates/report-template'
-import type {
-  ReportGenerationPlan,
-  StructuredActivity,
-} from '../../../../src/types/generated-report'
 
-export function buildReportGenerationPrompt(
+export interface ReportGenerationEvidence {
+  id: string
+  text: string
+}
+
+function withoutEvidence<T>(value: T): T {
+  return JSON.parse(
+    JSON.stringify(value, (key, item) => (key === 'evidence' ? undefined : item)),
+  ) as T
+}
+
+function sectionContext(
   information: StructuredActivity,
-  plan: ReportGenerationPlan,
+  section: PlannedReportSection,
   template: ReportTemplate,
-): string {
-  const writingAndSemanticPlan = {
+  evidence: ReportGenerationEvidence[],
+): unknown {
+  const indexedActivities = section.activityIndexes
+    .map((index) => information.activities[index])
+    .filter((activity): activity is NonNullable<typeof activity> => activity !== undefined)
+  return {
     template: {
       name: template.metadata.name,
       documentType: template.metadata.documentType,
     },
-    groundingPolicy: plan.groundingPolicy,
-    sections: plan.sections.map((section) => ({
+    section: {
       sectionId: section.sectionId,
       name: section.sectionName,
-      order: section.order,
-      level: section.level,
-      parentSectionId: section.parentSectionId,
+      purpose: section.purpose,
       required: section.required,
       repeatable: section.repeatable,
-      purpose: section.purpose,
-      factNames: section.factNames,
-      activityIndexes: section.activityIndexes,
-      writingStyle: section.writingStyle,
-      semantics: section.semantics,
-    })),
-    globalWritingStyle: plan.templateContext.writingPattern,
-    activityPatterns: plan.templateContext.activityPatterns,
-    fields: plan.templateContext.fields,
-    requirements: plan.templateContext.requirements,
-    semanticRelations: plan.templateContext.crossSectionRelations,
-    semanticUncertainties: plan.templateContext.semanticPattern.uncertainties,
+      expectedInformation: section.semantics?.expectedInformation.map(
+        (item) => ({
+          name: item.name,
+          description: item.description,
+          informationType: item.informationType,
+        }),
+      ) ?? [],
+      excludedInformation: section.semantics?.excludedInformation.map(
+        (item) => item.rule,
+      ) ?? [],
+      writingStyle: withoutEvidence(
+        section.writingStyle ?? template.writingPattern.globalStyle,
+      ),
+    },
+    facts: information.facts,
+    activities:
+      indexedActivities.length > 0 ? indexedActivities : information.activities,
+    allowedEvidence: evidence,
   }
+}
 
-  return `Você é o redator estruturado de relatórios do SIEAR.
+export function buildReportSectionGenerationPrompt(
+  information: StructuredActivity,
+  section: PlannedReportSection,
+  template: ReportTemplate,
+  evidence: ReportGenerationEvidence[],
+): string {
+  return `Você redige UMA seção de relatório no SIEAR.
+Escreva somente a seção fornecida. Não crie, remova, renomeie ou misture seções.
+Os fatos vêm exclusivamente de FACTS e ACTIVITIES. O modelo de relatório só define estrutura e estilo, nunca fatos.
+Não invente datas, responsáveis, equipamentos, resultados, números, procedimentos ou problemas.
+Selecione usedEvidenceIds exclusivamente da lista allowedEvidence. Eles devem sustentar o conteúdo.
+Se os fatos não sustentarem um detalhe, omita o detalhe. Não escreva que uma informação está ausente.
+Retorne somente JSON válido, sem Markdown.
 
-O plano já determinou a estrutura. Você deve somente preencher o conteúdo das seções do plano, mantendo seus identificadores e sua ordem.
-StructuredActivity é a única fonte de fatos. O template define exclusivamente COMO escrever e nunca é fonte do que aconteceu.
-É proibido inventar ou inferir datas, equipamentos, resultados, problemas, procedimentos, responsáveis, números ou qualquer outro fato sem evidência.
-Respeite pessoa, tempo verbal, voz, formalidade, regras, vocabulário, terminologia, padrão narrativo, informações esperadas e excluídas e relações semânticas.
-Não resolva incertezas sem evidência. Não crie, remova, renomeie, reordene ou reorganize seções.
-Cada afirmação factual deve estar apoiada por usedEvidence copiada literalmente de StructuredActivity.
-Retorne exclusivamente JSON válido, sem Markdown.
+FORMATO:
+{"sectionId":"id exato","name":"nome exato","content":"texto da seção","usedEvidenceIds":["evidence-001"]}
 
-Formato: {"sections":[{"sectionId":"identificador exato do plano","name":"nome exato","content":"texto","usedEvidence":["trecho literal"]}]}
-
-PLANO DE REDAÇÃO E SEMÂNTICA:
-${JSON.stringify(writingAndSemanticPlan, (key, value) => (key === 'evidence' ? undefined : value), 2)}
-
-STRUCTURED ACTIVITY:
-${JSON.stringify(information, null, 2)}`
+CONTEXTO DA SEÇÃO:
+${JSON.stringify(sectionContext(information, section, template, evidence))}`
 }

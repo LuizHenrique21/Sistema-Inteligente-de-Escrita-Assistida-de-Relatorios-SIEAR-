@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { SiearApi } from '../src/types/siear-api'
 import type { TemplateImportProgress } from '../src/types/template-import'
+import type { ReportGenerationProgress } from '../src/types/generated-report'
 
 function isTemplateImportProgress(
   value: unknown,
@@ -17,14 +18,39 @@ function isTemplateImportProgress(
   )
 }
 
+function isReportGenerationProgress(
+  value: unknown,
+): value is ReportGenerationProgress {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return false
+  const item = value as Record<string, unknown>
+  return (
+    (item.stage === 'extracting' ||
+      item.stage === 'planning' ||
+      item.stage === 'writing' ||
+      item.stage === 'finalizing') &&
+    typeof item.message === 'string' &&
+    typeof item.completedSections === 'number' &&
+    typeof item.totalSections === 'number' &&
+    (typeof item.sectionName === 'string' || item.sectionName === null)
+  )
+}
+
 const siearApi: SiearApi = {
-  app: { getInfo: () => ipcRenderer.invoke('app:get-info') },
   ai: {
     generate: (request) => ipcRenderer.invoke('ai:generate', request),
     extractReportInformation: (request) =>
       ipcRenderer.invoke('ai:extract-report-information', request),
     generateReport: (request) =>
       ipcRenderer.invoke('ai:generate-report', request),
+    onReportGenerationProgress: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+        if (isReportGenerationProgress(value)) callback(value)
+      }
+      ipcRenderer.on('reports:generation-progress', listener)
+      return () =>
+        ipcRenderer.removeListener('reports:generation-progress', listener)
+    },
     exportReportDocx: (request) =>
       ipcRenderer.invoke('reports:export-docx', request),
   },

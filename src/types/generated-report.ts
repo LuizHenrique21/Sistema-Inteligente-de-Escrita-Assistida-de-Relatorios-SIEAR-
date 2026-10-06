@@ -46,6 +46,20 @@ export interface GenerateReportRequest {
   templateId: string
 }
 
+export type ReportGenerationStage =
+  | 'extracting'
+  | 'planning'
+  | 'writing'
+  | 'finalizing'
+
+export interface ReportGenerationProgress {
+  stage: ReportGenerationStage
+  message: string
+  completedSections: number
+  totalSections: number
+  sectionName: string | null
+}
+
 export interface ExportReportDocxRequest {
   report: GeneratedReport
 }

@@ -4,11 +4,17 @@ import {
   SEMANTIC_PATTERN_STAGE_VERSION,
 } from '../ai/semantic-analysis.service'
 import {
+  SEMANTIC_GLOBAL_PROMPT_VERSION,
+  SEMANTIC_RELATIONS_PROMPT_VERSION,
+  SEMANTIC_SCHEMA_VERSION,
+  SEMANTIC_SECTION_PROMPT_VERSION,
+  SEMANTIC_SETTINGS,
+} from '../ai/semantic/semantic-contract'
+import {
   WRITING_ANALYSIS_SECTION_BATCH_SIZE,
   WRITING_ANALYZER_VERSION,
   WRITING_PATTERN_STAGE_VERSION,
 } from '../ai/writing-analysis.service'
-import { SEMANTIC_ANALYSIS_PROMPT_VERSION } from '../ai/prompts/semantic-analysis.prompt'
 import { STRUCTURE_ANALYSIS_PROMPT_VERSION } from '../ai/prompts/structure-analysis.prompt'
 import {
   GLOBAL_PROMPT_VERSION,
@@ -83,9 +89,13 @@ export function createPipelineCheckpointCompatibility(
     semantic: {
       stageVersion: SEMANTIC_PATTERN_STAGE_VERSION,
       analyzerVersion: SEMANTIC_ANALYZER_VERSION,
-      promptVersion: SEMANTIC_ANALYSIS_PROMPT_VERSION,
+      promptVersion: `${SEMANTIC_GLOBAL_PROMPT_VERSION}:${SEMANTIC_SECTION_PROMPT_VERSION}:${SEMANTIC_RELATIONS_PROMPT_VERSION}`,
       model: ollamaModel,
-      configurationHash: structuredOllama,
+      configurationHash: configurationHash({
+        structuredJson: true,
+        schemaVersion: SEMANTIC_SCHEMA_VERSION,
+        ...SEMANTIC_SETTINGS,
+      }),
     },
     formatting: {
       stageVersion: FORMATTING_PATTERN_STAGE_VERSION,

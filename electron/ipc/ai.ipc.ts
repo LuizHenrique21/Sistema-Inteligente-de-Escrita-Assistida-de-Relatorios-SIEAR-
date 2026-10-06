@@ -15,6 +15,19 @@ import { createReportExportHandler } from './report-export.handler'
 import { getLogger } from '../infrastructure/logging/logger.runtime'
 import { withIpcLogging } from '../infrastructure/logging/ipc-logging'
 
+function sendReportProgress(event: Electron.IpcMainInvokeEvent) {
+  return (progress: {
+    stage: string
+    message: string
+    completedSections: number
+    totalSections: number
+    sectionName: string | null
+  }): void => {
+    if (!event.sender.isDestroyed())
+      event.sender.send('reports:generation-progress', progress)
+  }
+}
+
 const ollamaService = new OllamaService()
 const generate = createAiGenerateHandler(ollamaService)
 const reportExtractionService = new ReportExtractionService(ollamaService)
@@ -75,7 +88,8 @@ export function registerAiIpc(templates: ReportTemplateService): void {
     withIpcLogging(
       'ai:generate-report',
       ipcLogger,
-      (_event, request: unknown) => generateReport(request),
+      (event, request: unknown) =>
+        generateReport(request, sendReportProgress(event)),
     ),
   )
   ipcMain.handle(

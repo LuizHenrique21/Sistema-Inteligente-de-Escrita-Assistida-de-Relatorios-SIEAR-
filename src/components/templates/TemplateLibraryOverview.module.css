@@ -1,0 +1,67 @@
+.overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 145px)) minmax(170px, 1fr);
+  gap: 1px;
+  margin-bottom: 25px;
+  overflow: hidden;
+  border: 1px solid #dce9e0;
+  border-radius: 14px;
+  background: #dce9e0;
+}
+.overview > div,
+.overview > p {
+  margin: 0;
+  padding: 14px 16px;
+  background: #fbfdfc;
+}
+.overview strong,
+.overview span {
+  display: block;
+}
+.overview strong {
+  color: #196044;
+  font-size: 1.35rem;
+  line-height: 1.05;
+}
+.overview span {
+  margin-top: 3px;
+  color: #6b8277;
+  font-size: 0.72rem;
+}
+.overview > p {
+  align-self: stretch;
+  color: #547164;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+@media (max-width: 850px) {
+  .overview {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .overview > p {
+    grid-column: 1 / -1;
+  }
+}
+:global([data-theme='dark']) .overview {
+  border-color: #2d493a;
+  background: #2d493a;
+}
+:global([data-theme='dark']) .overview > div,
+:global([data-theme='dark']) .overview > p {
+  background: #17231d;
+}
+:global([data-theme='dark']) .overview strong {
+  color: #aee1c1;
+}
+:global([data-theme='dark']) .overview span,
+:global([data-theme='dark']) .overview > p {
+  color: #a6bdaf;
+}
+@media (max-width: 650px) {
+  .overview {
+    grid-template-columns: 1fr;
+  }
+  .overview > p {
+    grid-column: auto;
+  }
+}

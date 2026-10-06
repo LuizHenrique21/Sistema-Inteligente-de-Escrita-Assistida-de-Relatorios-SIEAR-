@@ -63,11 +63,59 @@ describe('SqlitePipelineCheckpointRepository', () => {
     expect(migrations).toEqual([
       { version: 1, name: 'create_report_templates' },
       { version: 2, name: 'create_pipeline_checkpoints' },
+      { version: 3, name: 'add_template_version_to_pipeline_checkpoints' },
     ])
     expect(tables).toEqual([
       { name: 'pipeline_checkpoints' },
       { name: 'report_templates' },
     ])
+    repository = new SqlitePipelineCheckpointRepository(databasePath)
+  })
+
+  it('atualiza bancos legados que ainda não possuem template_version', () => {
+    repository.close()
+    const database = new DatabaseSync(databasePath)
+    database.exec('DROP TABLE pipeline_checkpoints')
+    database
+      .prepare('DELETE FROM schema_migrations WHERE version = ?')
+      .run(3)
+    database.exec(`
+      CREATE TABLE pipeline_checkpoints (
+        id TEXT PRIMARY KEY NOT NULL,
+        schema_version INTEGER NOT NULL,
+        document_hash TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        stage_version TEXT NOT NULL,
+        analyzer_version TEXT NOT NULL,
+        prompt_version TEXT NOT NULL,
+        model TEXT NOT NULL,
+        configuration_hash TEXT NOT NULL,
+        input_hash TEXT NOT NULL,
+        result_hash TEXT,
+        result_json TEXT,
+        status TEXT NOT NULL,
+        error_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+    `)
+    database.close()
+
+    repository = new SqlitePipelineCheckpointRepository(databasePath)
+    repository.close()
+    const upgraded = new DatabaseSync(databasePath)
+    const columns = upgraded
+      .prepare('PRAGMA table_info(pipeline_checkpoints)')
+      .all() as Array<{ name: string; notnull: number; dflt_value: string | null }>
+    upgraded.close()
+
+    expect(columns).toContainEqual(
+      expect.objectContaining({
+        name: 'template_version',
+        notnull: 1,
+        dflt_value: '1',
+      }),
+    )
     repository = new SqlitePipelineCheckpointRepository(databasePath)
   })
 

@@ -23,6 +23,7 @@ const FIELD_NAMES = new Map<string, string>([
   ['nome', 'nome'],
   ['data', 'data'],
   ['responsavel', 'responsável'],
+  ['relator', 'relator'],
   ['codigo', 'código'],
   ['equipamento', 'equipamento'],
   ['numero de atividade', 'número de atividade'],
@@ -92,9 +93,15 @@ function normalize(value: string): string {
 }
 
 function canonicalActivity(value: string): string {
-  return normalize(value)
+  const normalized = normalize(value)
+  if (/^sprint\s+(?:n\s*)?\d+\b/.test(normalized)) return 'sprint {n}'
+  return normalized
     .replace(/\b(?:atividade|activity)\s+(?:n\s*)?\d+\b/g, 'atividade {n}')
     .replace(/\b(?:atividade|activity)\s+[ivxlcdm]+\b/g, 'atividade {n}')
+}
+
+function isRepeatedActivity(key: string): boolean {
+  return key === 'sprint {n}' || key.includes('atividade {n}')
 }
 
 function purposeOf(name: string): string | null {
@@ -202,7 +209,10 @@ function buildSectionPatterns(sections: ExtractedSection[]): {
       purpose: purposeOf(section.title),
       required: true,
       repeatable:
-        count > 1 || /\batividade\s*(?:\d+|[ivxlcdm]+)\b/i.test(section.title),
+        count > 1 ||
+        /\b(?:atividade|sprint)\s*(?:n\s*)?(?:\d+|[ivxlcdm]+)\b/i.test(
+          section.title,
+        ),
       children: [],
     }
     byId.set(section.id, pattern)
@@ -228,7 +238,7 @@ function activityPatterns(
   const groups = new Map<string, ExtractedSection[]>()
   for (const section of document.sections) {
     const key = canonicalActivity(section.title)
-    if (!key.includes('atividade {n}')) continue
+    if (!isRepeatedActivity(key)) continue
     const values = groups.get(key) ?? []
     values.push(section)
     groups.set(key, values)

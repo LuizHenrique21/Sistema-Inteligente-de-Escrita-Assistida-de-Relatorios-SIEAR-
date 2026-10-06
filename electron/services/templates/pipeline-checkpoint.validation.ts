@@ -5,10 +5,12 @@ import type {
   WritingPattern,
 } from '../../../src/domain/templates'
 import type { DocumentRepresentation } from '../documents/types'
-import { isSemanticPattern } from '../ai/semantic-analysis.service'
+import { createSemanticContext } from '../ai/semantic/semantic-context'
+import { isSemanticPattern as isConsolidatedSemanticPattern } from '../ai/semantic/semantic-pattern.validation'
+import { isSemanticPattern as isLegacySemanticPattern } from '../ai/semantic-analysis.service'
 import { isWritingPattern } from '../ai/writing-analysis.service'
-import { buildSemanticAnalysisInput } from '../ai/prompts/semantic-analysis.prompt'
 import { buildWritingAnalysisInput } from '../ai/prompts/writing-analysis.prompt'
+import { buildSemanticAnalysisInput } from '../ai/prompts/semantic-analysis.prompt'
 import { isReportTemplate } from './report-template.validation'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -85,9 +87,15 @@ export function isCheckpointSemantic(
   structure: StructurePattern,
   writing: WritingPattern,
 ): value is SemanticPattern {
-  return isSemanticPattern(
-    value,
-    buildSemanticAnalysisInput(document, structure, writing),
+  return (
+    isConsolidatedSemanticPattern(
+      value,
+      createSemanticContext(document, structure, writing),
+    ) ||
+    isLegacySemanticPattern(
+      value,
+      buildSemanticAnalysisInput(document, structure, writing),
+    )
   )
 }
 

@@ -1,0 +1,116 @@
+.progress {
+  margin-bottom: 24px;
+  padding: 18px;
+  border: 1px solid #c9ddd0;
+  border-radius: 14px;
+  background: #f4faf6;
+}
+.header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.header > div {
+  display: grid;
+  gap: 3px;
+}
+.header output {
+  min-width: 3.6rem;
+  color: #245c43;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  text-align: right;
+}
+.progress progress {
+  width: 100%;
+  height: 0.7rem;
+  margin-top: 14px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: #dce8df;
+  accent-color: #245c43;
+}
+.progress progress::-webkit-progress-bar {
+  background: #dce8df;
+}
+.progress progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: #245c43;
+  transition: width 220ms ease;
+}
+.progress p {
+  margin: 8px 0 0;
+  color: #587060;
+  font-size: 0.82rem;
+}
+.estimate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 12px 0 0;
+}
+.estimate div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.estimate dt {
+  color: #587060;
+  font-size: 0.78rem;
+}
+.estimate dd {
+  margin: 0;
+  color: #245c43;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.progress ol {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 7px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.progress li {
+  padding: 8px 5px;
+  border-radius: 8px;
+  color: #718078;
+  background: #e8eeea;
+  font-size: 0.72rem;
+  text-align: center;
+}
+.completed {
+  color: #245c43 !important;
+  background: #dceee3 !important;
+}
+.active {
+  color: #fff !important;
+  background: #245c43 !important;
+  font-weight: 700;
+}
+@media (max-width: 900px) {
+  .progress ol {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+:global([data-theme='dark']) .progress {
+  border-color: #31523f;
+  background: #172b20;
+}
+:global([data-theme='dark']) .header output,
+:global([data-theme='dark']) .estimate dd {
+  color: #afe4c4;
+}
+:global([data-theme='dark']) .progress p,
+:global([data-theme='dark']) .estimate dt {
+  color: #a4c0af;
+}
+:global([data-theme='dark']) .progress li {
+  color: #a9c4b3;
+  background: #273c30;
+}

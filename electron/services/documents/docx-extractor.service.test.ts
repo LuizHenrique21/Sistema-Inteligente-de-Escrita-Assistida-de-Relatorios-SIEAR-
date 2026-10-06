@@ -102,6 +102,26 @@ describe('DocxExtractor', () => {
     )
   })
 
+  it('cria uma seção lógica quando o DOCX não usa estilos de título', async () => {
+    const file = path.join(directory, 'sem-titulos.docx')
+    const zip = await JSZip.loadAsync(await createDocx())
+    const documentXml = await zip.file('word/document.xml')!.async('text')
+    zip.file(
+      'word/document.xml',
+      documentXml.replaceAll('Heading1', 'Normal').replaceAll('Heading2', 'Normal'),
+    )
+    await writeFile(file, await zip.generateAsync({ type: 'nodebuffer' }))
+
+    const document = await new DocxExtractor().extract(file)
+
+    expect(document.sections).toMatchObject([
+      { title: 'Conteúdo do documento', level: 1, order: 1 },
+    ])
+    expect(document.sections[0]?.content).toContain('Documentar a atividade.')
+    expect(document.paragraphs.every((paragraph) => paragraph.sectionId !== null)).toBe(true)
+    expect(document.tables[0]?.sectionId).toBe(document.sections[0]?.id)
+  })
+
   it('rejeita um arquivo que não é um DOCX válido', async () => {
     const file = path.join(directory, 'invalido.docx')
     await writeFile(file, 'conteúdo inválido')
