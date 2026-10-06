@@ -8,6 +8,9 @@ import type {
 import type { DocumentRepresentation } from '../documents/types'
 import { buildSemanticAnalysisInput } from './prompts/semantic-analysis.prompt'
 import { SemanticAnalysisService } from './semantic-analysis.service'
+import { InMemoryPipelineCheckpointRepository } from '../../repositories/checkpoints/in-memory-pipeline-checkpoint.repository'
+import { PipelineCheckpointCoordinator } from '../templates/pipeline-checkpoint.coordinator'
+import { createPipelineCheckpointCompatibility } from '../templates/pipeline-checkpoint.config'
 
 const sample = 'A manutenção foi executada conforme o procedimento técnico.'
 const document: DocumentRepresentation = {
@@ -208,10 +211,48 @@ function validPattern(): SemanticPattern {
   }
 }
 
+function validUnits() {
+  return {
+    global: {
+      documentPurpose: 'Registrar atividades tecnicas.',
+      overallInformationFlow: ['section-001'],
+      generalSemanticRules: [],
+      fieldRoles: [
+        {
+          fieldId: 'field-001',
+          semanticRole: 'Pessoa responsavel pela execucao.',
+          evidenceIds: ['field-001-evidence-1'],
+        },
+      ],
+    },
+    section: {
+      sectionId: 'section-001',
+      purpose: 'Registrar o que foi executado e como.',
+      expectedInformation: [
+        {
+          name: 'procedimento executado',
+          description: 'Acao e procedimento realizado.',
+          informationType: 'procedure',
+          requirement: 'common',
+          supportIds: ['section-001-evidence-1'],
+        },
+      ],
+      excludedInformation: [],
+      evidenceIds: ['section-001-evidence-1'],
+    },
+    relations: { relations: [] },
+  }
+}
+
 describe('SemanticAnalysisService', () => {
   it('identifica função da seção e papel reutilizável dos campos', async () => {
+    const units = validUnits()
     const generator = {
-      generateJson: vi.fn().mockResolvedValue(JSON.stringify(validPattern())),
+      generateJson: vi
+        .fn()
+        .mockResolvedValueOnce(JSON.stringify(units.global))
+        .mockResolvedValueOnce(JSON.stringify(units.section))
+        .mockResolvedValueOnce(JSON.stringify(units.relations)),
     }
     const result = await new SemanticAnalysisService(generator).analyze(
       document,
@@ -220,16 +261,13 @@ describe('SemanticAnalysisService', () => {
     )
     expect(result.sections[0]).toMatchObject({
       sectionName: 'Descrição',
-      narrativePattern: 'ação seguida do procedimento',
+      narrativePattern: 'procedimental',
     })
     expect(result.fields[0]).toMatchObject({
       label: 'responsável',
-      semanticRole: 'Pessoa responsável pela execução.',
+      semanticRole: 'Pessoa responsavel pela execucao.',
     })
-    expect(generator.generateJson).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(Object),
-    )
+    expect(generator.generateJson).toHaveBeenCalledTimes(2)
   })
 
   it('envia estrutura, estilo e trechos representativos, não o documento bruto', async () => {
@@ -239,8 +277,13 @@ describe('SemanticAnalysisService', () => {
       writingStyle: { tone: 'técnico' },
     })
     expect(input.fieldCandidates[0]?.evidence[0]?.sectionName).toBe('Descrição')
+    const units = validUnits()
     const generator = {
-      generateJson: vi.fn().mockResolvedValue(JSON.stringify(validPattern())),
+      generateJson: vi
+        .fn()
+        .mockResolvedValueOnce(JSON.stringify(units.global))
+        .mockResolvedValueOnce(JSON.stringify(units.section))
+        .mockResolvedValueOnce(JSON.stringify(units.relations)),
     }
     await new SemanticAnalysisService(generator).analyze(
       document,
@@ -338,5 +381,115 @@ describe('SemanticAnalysisService', () => {
           .mockResolvedValue(JSON.stringify(inventedEvidence)),
       }).analyze(document, structure, writing),
     ).rejects.toMatchObject({ code: 'INVALID_SEMANTIC_ANALYSIS' })
+  })
+
+  it('corrige somente a secao que retornou evidencia ou requisito invalido', async () => {
+    const units = validUnits()
+    const invalidSection = structuredClone(units.section)
+    invalidSection.expectedInformation[0]!.requirement = 'required'
+    invalidSection.expectedInformation[0]!.supportIds = ['section-001-evidence-1']
+    const generator = {
+      generateJson: vi
+        .fn()
+        .mockResolvedValueOnce(JSON.stringify(units.global))
+        .mockResolvedValueOnce(JSON.stringify(invalidSection))
+        .mockResolvedValueOnce(JSON.stringify(units.section))
+        .mockResolvedValueOnce(JSON.stringify(units.relations)),
+    }
+    const attempts: string[] = []
+    await new SemanticAnalysisService(generator).analyze(document, structure, writing, {
+      onAttempt: (attempt) => attempts.push(`${attempt.scope}:${attempt.attempt}`),
+    })
+    expect(attempts).toEqual([
+      'global:0',
+      'section/section-001:0',
+      'section/section-001:1',
+    ])
+  })
+
+  it('rejeita exclusao inventada e corrige somente a secao', async () => {
+    const units = validUnits()
+    const invalidSection = structuredClone(units.section)
+    ;(invalidSection as { excludedInformation: unknown[] }).excludedInformation.push({
+      rule: 'Nao mencionar datas.',
+      justification: 'Nao ha datas.',
+      evidenceIds: ['section-001-evidence-1'],
+    })
+    const generator = {
+      generateJson: vi
+        .fn()
+        .mockResolvedValueOnce(JSON.stringify(units.global))
+        .mockResolvedValueOnce(JSON.stringify(invalidSection))
+        .mockResolvedValueOnce(JSON.stringify(units.section))
+        .mockResolvedValueOnce(JSON.stringify(units.relations)),
+    }
+    await expect(
+      new SemanticAnalysisService(generator).analyze(document, structure, writing),
+    ).resolves.toMatchObject({ documentType: 'Relatório técnico' })
+    expect(generator.generateJson).toHaveBeenCalledTimes(3)
+  })
+
+  it('pula relações quando há somente uma seção', async () => {
+    const units = validUnits()
+    const generator = {
+      generateJson: vi
+        .fn()
+        .mockResolvedValueOnce(JSON.stringify(units.global))
+        .mockResolvedValueOnce(JSON.stringify(units.section)),
+    }
+    const result = await new SemanticAnalysisService(generator).analyze(
+      document,
+      structure,
+      writing,
+    )
+    expect(result.crossSectionRelations).toEqual([])
+    expect(generator.generateJson).toHaveBeenCalledTimes(2)
+  })
+
+  it('esgota retry global sem executar secoes', async () => {
+    const generator = { generateJson: vi.fn().mockResolvedValue('{}') }
+    await expect(
+      new SemanticAnalysisService(generator).analyze(document, structure, writing),
+    ).rejects.toMatchObject({
+      code: 'INVALID_SEMANTIC_ANALYSIS',
+      internalCode: 'INVALID_GLOBAL_SEMANTIC_ANALYSIS',
+    })
+    expect(generator.generateJson).toHaveBeenCalledTimes(3)
+  })
+
+  it('retoma subcheckpoints e nao repete o global valido', async () => {
+    const units = validUnits()
+    const repository = new InMemoryPipelineCheckpointRepository()
+    const checkpoints = {
+      coordinator: new PipelineCheckpointCoordinator(
+        repository,
+        createPipelineCheckpointCompatibility('qwen3:8b'),
+      ),
+      documentHash: 'fixture-hash',
+    }
+    const first = {
+      generateJson: vi
+        .fn()
+        .mockResolvedValueOnce(JSON.stringify(units.global))
+        .mockResolvedValue('{}'),
+    }
+    await expect(
+      new SemanticAnalysisService(first).analyze(document, structure, writing, {
+        checkpoints,
+      }),
+    ).rejects.toMatchObject({ internalCode: 'INVALID_SECTION_SEMANTIC_ANALYSIS' })
+    const second = {
+      generateJson: vi
+        .fn()
+        .mockResolvedValueOnce(JSON.stringify(units.section))
+        .mockResolvedValueOnce(JSON.stringify(units.relations)),
+    }
+    const reused: string[] = []
+    await new SemanticAnalysisService(second).analyze(document, structure, writing, {
+      checkpoints,
+      onReuse: (scope) => reused.push(scope),
+    })
+    expect(reused).toEqual(['global'])
+    expect(second.generateJson).toHaveBeenCalledTimes(1)
   })
 })

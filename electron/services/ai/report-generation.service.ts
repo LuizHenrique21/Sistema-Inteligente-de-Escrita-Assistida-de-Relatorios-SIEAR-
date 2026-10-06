@@ -1,90 +1,118 @@
 import { randomUUID } from 'node:crypto'
 import type {
   GeneratedReport,
-  GeneratedReportSection,
   PlannedReportSection,
   ReportGenerationPlan,
+  ReportGenerationProgress,
   StructuredActivity,
 } from '../../../src/types/generated-report'
 import type { ReportTemplate } from '../../../src/domain/templates/report-template'
 import {
-  buildGenerationPromptContext,
-  buildReportGenerationPrompt,
+  buildReportSectionGenerationPrompt,
+  type ReportGenerationEvidence,
 } from './prompts/report-generation.prompt'
 import type { StructuredTextGenerator } from './report-extraction.service'
 import { ReportGenerationServiceError } from './report-generation.error'
 import { getLogger } from '../../infrastructure/logging/logger.runtime'
 
 const logger = getLogger('ReportGenerationService')
+const MAX_RETRIES = 2
+const MAX_RESPONSE_CHARACTERS = 12_000
 
 interface GroundedSection {
   sectionId: string
   name: string
   content: string
-  usedEvidence: string[]
+  usedEvidenceIds: string[]
 }
 
-function evidencePool(information: StructuredActivity): string[] {
+function evidenceCatalog(
+  information: StructuredActivity,
+): ReportGenerationEvidence[] {
   return [
     ...information.facts.map((fact) => fact.evidence),
     ...information.activities.flatMap((activity) => activity.evidence),
   ]
+    .filter((text, index, values) => text.trim() !== '' && values.indexOf(text) === index)
+    .map((text, index) => ({
+      id: `evidence-${String(index + 1).padStart(3, '0')}`,
+      text,
+    }))
 }
 
-function parse(
+function schema(section: PlannedReportSection, evidenceIds: string[]): Record<string, unknown> {
+  return {
+    type: 'object',
+    properties: {
+      sectionId: { type: 'string', enum: [section.sectionId] },
+      name: { type: 'string', enum: [section.sectionName] },
+      content: { type: 'string', minLength: 1, maxLength: 6_000 },
+      usedEvidenceIds: {
+        type: 'array',
+        minItems: 1,
+        maxItems: Math.min(4, evidenceIds.length),
+        uniqueItems: true,
+        items: { type: 'string', enum: evidenceIds },
+      },
+    },
+    required: ['sectionId', 'name', 'content', 'usedEvidenceIds'],
+    additionalProperties: false,
+  }
+}
+
+function parseSection(
   response: string,
-  information: StructuredActivity,
-): GroundedSection[] {
+  section: PlannedReportSection,
+  evidenceIds: string[],
+): GroundedSection {
   let value: unknown
   try {
     value = JSON.parse(response)
   } catch {
-    throw new ReportGenerationServiceError(
-      'A IA retornou JSON inválido para o relatório.',
-    )
+    throw new ReportGenerationServiceError('A IA retornou JSON inválido para a seção.')
   }
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw new ReportGenerationServiceError('A resposta da seção não é um objeto JSON.')
+  const item = value as Record<string, unknown>
   if (
-    typeof value !== 'object' ||
-    value === null ||
-    Array.isArray(value) ||
-    Object.keys(value).length !== 1 ||
-    !Object.hasOwn(value, 'sections')
+    Object.keys(item).length !== 4 ||
+    !Object.hasOwn(item, 'sectionId') ||
+    !Object.hasOwn(item, 'name') ||
+    !Object.hasOwn(item, 'content') ||
+    !Object.hasOwn(item, 'usedEvidenceIds') ||
+    item.sectionId !== section.sectionId ||
+    item.name !== section.sectionName ||
+    typeof item.content !== 'string' ||
+    item.content.trim() === '' ||
+    !Array.isArray(item.usedEvidenceIds) ||
+    item.usedEvidenceIds.length === 0 ||
+    item.usedEvidenceIds.some(
+      (id) => typeof id !== 'string' || !evidenceIds.includes(id),
+    ) ||
+    new Set(item.usedEvidenceIds).size !== item.usedEvidenceIds.length
   )
     throw new ReportGenerationServiceError(
-      'A resposta não contém somente a estrutura esperada de seções.',
+      'A resposta contém seção inválida ou evidências não fornecidas pelo usuário.',
     )
-  const sections = (value as Record<string, unknown>).sections
-  const pool = evidencePool(information)
-  if (
-    !Array.isArray(sections) ||
-    !sections.every((section: unknown) => {
-      if (
-        typeof section !== 'object' ||
-        section === null ||
-        Array.isArray(section)
-      )
-        return false
-      const item = section as Record<string, unknown>
-      return (
-        Object.keys(item).length === 4 &&
-        typeof item.sectionId === 'string' &&
-        item.sectionId.trim() !== '' &&
-        typeof item.name === 'string' &&
-        item.name.trim() !== '' &&
-        typeof item.content === 'string' &&
-        item.content.trim() !== '' &&
-        Array.isArray(item.usedEvidence) &&
-        item.usedEvidence.length > 0 &&
-        item.usedEvidence.every(
-          (evidence) => typeof evidence === 'string' && pool.includes(evidence),
-        )
-      )
-    })
+  return item as unknown as GroundedSection
+}
+
+function unsupportedNumbers(
+  content: string,
+  information: StructuredActivity,
+): string[] {
+  const sourceNumbers = new Set(
+    JSON.stringify(information).match(/\b\d+(?:[.,]\d+)?\b/g) ?? [],
   )
-    throw new ReportGenerationServiceError(
-      'A resposta contém seções inválidas ou evidências não fornecidas pelo usuário.',
-    )
-  return sections as GroundedSection[]
+  // A leading "1." or "1)" is presentation, not a numeric claim.
+  const withoutListMarkers = content.replace(/(?:^|\n)\s*\d+[.)]\s+/g, '\n')
+  return [
+    ...new Set(
+      (withoutListMarkers.match(/\b\d+(?:[.,]\d+)?\b/g) ?? []).filter(
+        (number) => !sourceNumbers.has(number),
+      ),
+    ),
+  ]
 }
 
 function parseSection(
@@ -108,14 +136,41 @@ function validateNumericClaims(
   sections: GroundedSection[],
   information: StructuredActivity,
 ): void {
-  const source = JSON.stringify(information)
-  const numbers = sections.flatMap(
-    (section) => section.content.match(/\b\d+(?:[.,]\d+)?\b/g) ?? [],
+  const numbers = sections.flatMap((section) =>
+    unsupportedNumbers(section.content, information),
   )
-  if (numbers.some((number) => !source.includes(number)))
+  if (numbers.length > 0)
     throw new ReportGenerationServiceError(
       'A IA incluiu um número que não foi fornecido pelo usuário.',
     )
+}
+
+function groundedSectionFallback(
+  section: PlannedReportSection,
+  information: StructuredActivity,
+  evidence: ReportGenerationEvidence[],
+): GroundedSection {
+  const excerpts = [
+    ...information.activities.flatMap((activity) => activity.evidence),
+    ...information.facts.map((fact) => fact.evidence),
+  ].filter((excerpt, index, values) =>
+    excerpt.trim() !== '' && values.indexOf(excerpt) === index,
+  )
+  const content = excerpts.join(' ').trim().slice(0, 6_000)
+  const usedEvidenceIds = evidence
+    .filter((item) => excerpts.includes(item.text))
+    .slice(0, 4)
+    .map((item) => item.id)
+  if (!content || !usedEvidenceIds.length)
+    throw new ReportGenerationServiceError(
+      'Não há evidências suficientes fornecidas pelo usuário para gerar o relatório.',
+    )
+  return {
+    sectionId: section.sectionId,
+    name: section.sectionName,
+    content,
+    usedEvidenceIds,
+  }
 }
 
 export class ReportGenerationService {
@@ -125,107 +180,125 @@ export class ReportGenerationService {
     information: StructuredActivity,
     plan: ReportGenerationPlan,
     template: ReportTemplate,
+    onProgress?: (progress: ReportGenerationProgress) => void,
   ): Promise<GeneratedReport> {
     const timer = logger.startTimer('Structured report writing', {
       templateId: template.metadata.id,
       plannedSections: plan.sections.length,
     })
-    const generatedSections: GeneratedReportSection[] = []
-    const groundedSections: GroundedSection[] = []
-    for (const section of plan.sections) {
-      const schema: Record<string, unknown> = {
-      type: 'object',
-      properties: {
-        sections: {
-          type: 'array',
-          minItems: 1,
-          maxItems: 1,
-          items: {
-            type: 'object',
-            properties: {
-              sectionId: { const: section.sectionId },
-              name: { const: section.sectionName },
-              content: { type: 'string', minLength: 1 },
-              usedEvidence: {
-                type: 'array',
-                minItems: 1,
-                items: { type: 'string' },
-              },
-            },
-            required: ['sectionId', 'name', 'content', 'usedEvidence'],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ['sections'],
-      additionalProperties: false,
-    }
-      const context = buildGenerationPromptContext(
-        information,
-        plan,
-        template,
-        section,
-        generatedSections,
+    const evidence = evidenceCatalog(information)
+    if (!evidence.length)
+      throw new ReportGenerationServiceError(
+        'Não há evidências suficientes fornecidas pelo usuário para gerar o relatório.',
       )
-      const response = await this.generator.generateJson(
-        buildReportGenerationPrompt(context),
-        schema,
+    const sections: GroundedSection[] = []
+    for (const [index, section] of plan.sections.entries()) {
+      onProgress?.({
+        stage: 'writing',
+        message: `Redigindo seção ${index + 1} de ${plan.sections.length}: ${section.sectionName}.`,
+        completedSections: index,
+        totalSections: plan.sections.length,
+        sectionName: section.sectionName,
+      })
+      sections.push(
+        await this.generateSection(information, section, template, evidence, index, plan.sections.length),
       )
-      const grounded = parseSection(response, information, section)
-      groundedSections.push(grounded)
-      generatedSections.push({
-        id: grounded.sectionId,
-        name: grounded.name,
-        order: section.order,
-        content: grounded.content.trim(),
-        elements: [
-          { type: 'paragraph' as const, content: grounded.content.trim() },
-        ],
+      onProgress?.({
+        stage: 'writing',
+        message: `Seção ${index + 1} de ${plan.sections.length} concluída: ${section.sectionName}.`,
+        completedSections: index + 1,
+        totalSections: plan.sections.length,
+        sectionName: section.sectionName,
       })
     }
-    const sections = groundedSections
-    const sectionIds = plan.sections.map((section) => section.sectionId)
-    const byId = new Map(
-      plan.sections.map((section) => [section.sectionId, section]),
-    )
-    const returnedIds = sections.map((section) => section.sectionId)
-    if (
-      new Set(returnedIds).size !== returnedIds.length ||
-      returnedIds.some((id) => !byId.has(id)) ||
-      sections.some(
-        (section) => byId.get(section.sectionId)?.sectionName !== section.name,
-      )
-    )
-      throw new ReportGenerationServiceError(
-        'A IA retornou seções duplicadas ou inexistentes no modelo.',
-      )
-    if (sectionIds.some((id) => !returnedIds.includes(id)))
-      throw new ReportGenerationServiceError(
-        'A IA omitiu uma seção definida pelo plano de geração.',
-      )
-    const expectedOrder = plan.sections.map((section) => section.sectionId)
-    const returnedPositions = returnedIds.map((id) => expectedOrder.indexOf(id))
-    if (
-      returnedPositions.some(
-        (position, index) =>
-          index > 0 && position <= returnedPositions[index - 1]!,
-      )
-    )
-      throw new ReportGenerationServiceError(
-        'A IA retornou as seções fora da ordem do modelo.',
-      )
     validateNumericClaims(sections, information)
     const report: GeneratedReport = {
       id: randomUUID(),
       templateId: template.metadata.id,
       templateName: template.metadata.name,
       createdAt: new Date().toISOString(),
-      sections: generatedSections,
+      sections: sections.map((section, index) => ({
+        id: section.sectionId,
+        name: section.name,
+        order: plan.sections[index]!.order,
+        content: section.content.trim(),
+        elements: [
+          { type: 'paragraph' as const, content: section.content.trim() },
+        ],
+      })),
     }
     timer.end('Structured report writing completed', {
       reportId: report.id,
       sections: report.sections.length,
     })
     return report
+  }
+
+  private async generateSection(
+    information: StructuredActivity,
+    section: PlannedReportSection,
+    template: ReportTemplate,
+    evidence: ReportGenerationEvidence[],
+    index: number,
+    total: number,
+  ): Promise<GroundedSection> {
+    const allowedIds = evidence.map((item) => item.id)
+    const sectionSchema = schema(section, allowedIds)
+    let previous: unknown = null
+    let error: unknown = null
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      logger.info(
+        attempt ? 'REPORT_SECTION_RETRY' : 'REPORT_SECTION_STARTED',
+        { sectionId: section.sectionId, sectionIndex: index + 1, total, attempt },
+      )
+      const prompt = attempt
+        ? `Corrija somente o JSON anterior. Use o schema e apenas IDs de evidência permitidos. Não invente fatos. Remova qualquer número que não esteja literalmente sustentado pelas evidências; marcadores de lista são permitidos apenas no início da linha. Retorne JSON sem Markdown. SCHEMA: ${JSON.stringify(sectionSchema)} ANTERIOR: ${JSON.stringify(previous)}${previous === null ? ` CONTEXTO: ${buildReportSectionGenerationPrompt(information, section, template, evidence)}` : ''}`
+        : buildReportSectionGenerationPrompt(
+            information,
+            section,
+            template,
+            evidence,
+          )
+      const response = await this.generator.generateJson(prompt, sectionSchema)
+      if (response.length > MAX_RESPONSE_CHARACTERS) {
+        error = new ReportGenerationServiceError('A resposta da seção excedeu o limite permitido.')
+        previous = null
+      } else {
+        try {
+          const parsed = parseSection(response, section, allowedIds)
+          if (unsupportedNumbers(parsed.content, information).length > 0) {
+            if (attempt >= 1) {
+              logger.warn('REPORT_SECTION_GROUNDED_FALLBACK', {
+                sectionId: section.sectionId,
+                sectionIndex: index + 1,
+                total,
+                reason: 'unsupported-numeric-claims',
+              })
+              return groundedSectionFallback(section, information, evidence)
+            }
+            throw new ReportGenerationServiceError(
+              'A IA incluiu um número que não foi fornecido pelo usuário.',
+            )
+          }
+          logger.info('REPORT_SECTION_COMPLETED', {
+            sectionId: section.sectionId,
+            sectionIndex: index + 1,
+            total,
+            attempt,
+          })
+          return parsed
+        } catch (reason) {
+          error = reason
+          try {
+            previous = JSON.parse(response)
+          } catch {
+            previous = null
+          }
+        }
+      }
+    }
+    throw error instanceof Error
+      ? error
+      : new ReportGenerationServiceError('Não foi possível validar a seção gerada.')
   }
 }

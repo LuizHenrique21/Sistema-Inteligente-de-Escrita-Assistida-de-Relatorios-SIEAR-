@@ -1,0 +1,84 @@
+.progress {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 15px 16px;
+  border: 1px solid #b9dcc7;
+  border-radius: 13px;
+  color: #285440;
+  background: #f1faf4;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.header strong {
+  display: block;
+  margin-top: 3px;
+  color: #1d4e37;
+  font-size: 0.88rem;
+}
+
+.header output {
+  color: #176447;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.progress progress {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  appearance: none;
+  background: #d6eadc;
+}
+
+.progress progress::-webkit-progress-bar {
+  background: #d6eadc;
+}
+
+.progress progress::-webkit-progress-value {
+  border-radius: inherit;
+  background: linear-gradient(90deg, #26835d, #54ac78);
+  transition: width 260ms ease;
+}
+
+.progress progress::-moz-progress-bar {
+  border-radius: inherit;
+  background: linear-gradient(90deg, #26835d, #54ac78);
+}
+
+.progress p {
+  margin: 0;
+  color: #638573;
+  font-size: 0.77rem;
+}
+
+:global([data-theme='dark']) .progress {
+  border-color: #315d46;
+  color: #bfe0ca;
+  background: #172c20;
+}
+
+:global([data-theme='dark']) .header strong {
+  color: #d8f0e0;
+}
+
+:global([data-theme='dark']) .header output {
+  color: #9cdbb2;
+}
+
+:global([data-theme='dark']) .progress progress,
+:global([data-theme='dark']) .progress progress::-webkit-progress-bar {
+  background: #294635;
+}
+
+:global([data-theme='dark']) .progress p {
+  color: #a0c1ac;
+}

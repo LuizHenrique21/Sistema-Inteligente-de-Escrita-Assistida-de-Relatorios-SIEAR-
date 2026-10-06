@@ -1,0 +1,74 @@
+.panel {
+  display: grid;
+  gap: 14px;
+}
+.card {
+  padding: 17px;
+  border: 1px solid rgba(43, 94, 67, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.75);
+}
+.privacyCard {
+  display: flex;
+  gap: 10px;
+  color: #3e6452;
+  background: linear-gradient(135deg, #eef8f1, #e4f3ea);
+}
+.icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #239064;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+.card strong {
+  display: block;
+  color: #204d38;
+  font-size: 0.85rem;
+}
+.card p {
+  margin: 5px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.statsCard dl {
+  display: grid;
+  gap: 11px;
+  margin: 13px 0 0;
+}
+.statsCard dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.statsCard dt {
+  color: #73857c;
+  font-size: 0.78rem;
+}
+.statsCard dd {
+  margin: 0;
+  color: #234b39;
+  font-size: 0.83rem;
+  font-weight: 650;
+  text-align: right;
+}
+:global([data-theme='dark']) .card {
+  border-color: #2d493a;
+  background: #17231d;
+}
+:global([data-theme='dark']) .privacyCard {
+  color: #b8d8c5;
+  background: linear-gradient(135deg, #173226, #193828);
+}
+:global([data-theme='dark']) .card strong,
+:global([data-theme='dark']) .statsCard dd {
+  color: #d9eee1;
+}
+:global([data-theme='dark']) .statsCard dt {
+  color: #9ab6a5;
+}

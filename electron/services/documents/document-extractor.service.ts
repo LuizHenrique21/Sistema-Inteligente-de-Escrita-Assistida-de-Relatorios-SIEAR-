@@ -9,8 +9,8 @@ import { serializeError } from '../../infrastructure/logging/log-sanitizer'
 
 const logger = getLogger('DocumentExtractorService')
 
-export const DOCUMENT_EXTRACTION_ANALYZER_VERSION = '1' as const
-export const DOCUMENT_REPRESENTATION_STAGE_VERSION = '1' as const
+export const DOCUMENT_EXTRACTION_ANALYZER_VERSION = '2' as const
+export const DOCUMENT_REPRESENTATION_STAGE_VERSION = '2' as const
 
 export class DocumentExtractorService implements DocumentExtractor {
   constructor(

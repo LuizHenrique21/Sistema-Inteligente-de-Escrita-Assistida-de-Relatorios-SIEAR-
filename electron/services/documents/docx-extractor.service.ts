@@ -541,6 +541,34 @@ export class DocxExtractor implements DocumentExtractor {
         )
         ;(type === 'header' ? headers : footers).push(parsed)
       }
+      if (!sections.length) {
+        const content = [
+          ...paragraphs.map((paragraph) => paragraph.text),
+          ...tables.flatMap((table) =>
+            table.rows.map((row) => row.filter(Boolean).join(' | ')),
+          ),
+        ]
+          .map((value) => value.trim())
+          .filter(Boolean)
+          .join('\n')
+        if (content) {
+          const section: ExtractedSection = {
+            id: randomUUID(),
+            title: 'Conteúdo do documento',
+            level: 1,
+            order: 1,
+            content,
+            parentSectionId: null,
+          }
+          sections.push(section)
+          for (const paragraph of paragraphs)
+            if (paragraph.sectionId === null) paragraph.sectionId = section.id
+          for (const table of tables)
+            if (table.sectionId === null) table.sectionId = section.id
+          for (const figure of figures)
+            if (figure.sectionId === null) figure.sectionId = section.id
+        }
+      }
       if (
         paragraphs.every((paragraph) => !paragraph.text) &&
         tables.length === 0 &&

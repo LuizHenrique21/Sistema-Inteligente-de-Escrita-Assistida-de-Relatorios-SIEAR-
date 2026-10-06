@@ -228,6 +228,38 @@ describe('StructureAnalysisService', () => {
     expect(result.hierarchy[0]?.children).toHaveLength(3)
   })
 
+  it('reconhece sprints numeradas como uma colecao de relatorios repetiveis', async () => {
+    const sections: ExtractedSection[] = [
+      {
+        id: 'sprint-0',
+        title: 'Sprint 0 - Setup Inicial',
+        level: 1,
+        order: 1,
+        content: '',
+        parentSectionId: null,
+      },
+      {
+        id: 'sprint-1',
+        title: 'Sprint 1',
+        level: 1,
+        order: 2,
+        content: '',
+        parentSectionId: null,
+      },
+    ]
+    const result = await new StructureAnalysisService().analyze(
+      documentFixture({ sections }),
+    )
+
+    expect(result.sections.every((section) => section.repeatable)).toBe(true)
+    expect(result.activityPatterns).toContainEqual(
+      expect.objectContaining({
+        namePattern: 'sprint {n}',
+        repeatable: true,
+      }),
+    )
+  })
+
   it('identifica apenas campos conhecidos e registra evidências', async () => {
     const result = await new StructureAnalysisService().analyze(
       documentFixture({

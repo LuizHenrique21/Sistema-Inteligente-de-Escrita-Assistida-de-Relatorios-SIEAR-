@@ -1,0 +1,215 @@
+.area {
+  display: grid;
+  gap: 18px;
+}
+.result,
+.document {
+  padding: clamp(22px, 4vw, 34px);
+  border: 1px solid #d7e7dd;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 14px 36px rgba(25, 59, 43, 0.06);
+}
+.result > header,
+.document > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #e3ebe6;
+}
+.result h2 {
+  margin: 6px 0 0;
+  font-size: 1.45rem;
+}
+.success {
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #1a694a;
+  background: #e4f5eb;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 34px;
+  margin-top: 8px;
+}
+.grid > div {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 16px;
+  padding: 13px 0;
+  border-bottom: 1px solid #e3ebe6;
+}
+.grid dt {
+  color: #6c7b74;
+}
+.grid dd {
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.55;
+}
+.grid ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.fullRow {
+  grid-column: span 2;
+}
+.result details {
+  margin-top: 18px;
+}
+.result summary {
+  color: #31704f;
+  font-weight: 700;
+  cursor: pointer;
+}
+.result pre {
+  overflow-x: auto;
+  margin: 12px 0 0;
+  padding: 16px;
+  border-radius: 10px;
+  color: #dcefe4;
+  background: #173228;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.warning,
+.error {
+  padding: 16px;
+  border-radius: 12px;
+}
+.warning {
+  color: #6c5010;
+  border: 1px solid #efd99d;
+  background: #fff9e7;
+}
+.error {
+  color: #842828;
+  border: 1px solid #efc5c5;
+  background: #fff2f2;
+}
+.warning strong,
+.error strong {
+  display: block;
+  margin-bottom: 6px;
+}
+.warning p,
+.error p {
+  margin: 0;
+  line-height: 1.6;
+}
+.warning ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  line-height: 1.6;
+}
+.document > header {
+  align-items: center;
+  border-bottom: 2px solid #136146;
+}
+.document h2 {
+  margin: 6px 0 4px;
+}
+.document time {
+  color: #6b7c73;
+  font-size: 0.8rem;
+}
+.document button {
+  width: auto;
+  padding: 12px 17px;
+  border: 0;
+  border-radius: 11px;
+  color: #fff;
+  background: #126849;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.document button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.documentBody {
+  padding-inline: clamp(0px, 2vw, 14px);
+}
+.documentBody > section {
+  padding: 23px 0;
+  border-bottom: 1px solid #e3ebe6;
+}
+.documentBody > section:last-child {
+  border-bottom: 0;
+}
+.documentBody h3 {
+  margin: 0 0 8px;
+  color: #214d39;
+  font-size: 1.1rem;
+}
+.documentBody p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.75;
+}
+.exportMessage {
+  margin: 0;
+  padding: 11px;
+  border-radius: 9px;
+  color: #1d6446;
+  background: #ebf8ef;
+  font-size: 0.82rem;
+}
+:global([data-theme='dark']) .result,
+:global([data-theme='dark']) .document {
+  border-color: #2d493a;
+  color: #dcece2;
+  background: #17231d;
+  box-shadow: none;
+}
+:global([data-theme='dark']) .result > header,
+:global([data-theme='dark']) .document > header,
+:global([data-theme='dark']) .grid > div,
+:global([data-theme='dark']) .documentBody > section {
+  border-color: #2d493a;
+}
+:global([data-theme='dark']) .result h2,
+:global([data-theme='dark']) .document h2,
+:global([data-theme='dark']) .documentBody h3 {
+  color: #e1f0e7;
+}
+:global([data-theme='dark']) .grid dt,
+:global([data-theme='dark']) .document time {
+  color: #9db9a8;
+}
+:global([data-theme='dark']) .grid dd {
+  color: #d3e5da;
+}
+:global([data-theme='dark']) .warning {
+  color: #f0d68e;
+  border-color: #705a27;
+  background: #332b18;
+}
+@media (max-width: 650px) {
+  .result > header,
+  .document > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .document button {
+    width: 100%;
+  }
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .fullRow {
+    grid-column: auto;
+  }
+  .grid > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

@@ -40,6 +40,7 @@ describe('SqliteReportTemplateRepository', () => {
     expect(migrations).toEqual([
       { version: 1, name: 'create_report_templates' },
       { version: 2, name: 'create_pipeline_checkpoints' },
+      { version: 3, name: 'add_template_version_to_pipeline_checkpoints' },
     ])
     expect(table).toEqual({ name: 'report_templates' })
 

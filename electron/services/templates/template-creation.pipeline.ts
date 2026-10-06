@@ -21,6 +21,7 @@ import {
 } from './pipeline-checkpoint.hash'
 import type { PipelineCheckpointCoordinator } from './pipeline-checkpoint.coordinator'
 import type { WritingAnalysisOptions } from '../ai/writing-analysis.service'
+import type { SemanticAnalysisOptions } from '../ai/semantic-analysis.service'
 import {
   checkpointResultValidators,
   isCheckpointSemantic,
@@ -52,6 +53,7 @@ export interface PipelineSemanticAnalyzer {
     document: DocumentRepresentation | DocumentAnalysisContext,
     structure: StructurePattern,
     writing: WritingPattern,
+    options?: SemanticAnalysisOptions,
   ): Promise<SemanticPattern>
 }
 
@@ -237,7 +239,13 @@ export class TemplateCreationPipeline {
         structureStage.resultHash,
         writingStage.resultHash,
       ),
-      () => this.semanticAnalyzer.analyze(analysisContext, structure, writing),
+      () =>
+        this.semanticAnalyzer.analyze(document, structure, writing, {
+          onProgress: (message) => onProgress({ step: 4, message }),
+          ...(coordinator
+            ? { checkpoints: { coordinator, documentHash } }
+            : {}),
+        }),
       (value): value is SemanticPattern =>
         isCheckpointSemantic(value, document, structure, writing),
     )

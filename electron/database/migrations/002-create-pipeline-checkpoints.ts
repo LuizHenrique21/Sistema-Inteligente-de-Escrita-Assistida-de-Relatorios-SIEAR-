@@ -8,7 +8,6 @@ export const createPipelineCheckpointsMigration: DatabaseMigration = {
       id TEXT PRIMARY KEY NOT NULL,
       schema_version INTEGER NOT NULL,
       document_hash TEXT NOT NULL,
-      template_version INTEGER NOT NULL,
       stage TEXT NOT NULL CHECK (stage IN (
         'extraction', 'structure', 'writing', 'semantic', 'formatting',
         'consolidation'

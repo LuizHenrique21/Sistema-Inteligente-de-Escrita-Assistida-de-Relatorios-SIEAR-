@@ -1,220 +1,75 @@
-import type {
-  SectionRelationship,
-  WritingRule,
-} from '../../../../src/domain/templates'
+import type { PlannedReportSection, StructuredActivity } from '../../../../src/types/generated-report'
 import type { ReportTemplate } from '../../../../src/domain/templates/report-template'
-import type {
-  GeneratedReportSection,
-  PlannedReportSection,
-  ReportGenerationPlan,
-  StructuredActivity,
-  StructuredActivityItem,
-  StructuredFact,
-} from '../../../../src/types/generated-report'
-import { compactPromptJson } from './prompt-serialization'
 
-export interface GenerationPromptContext {
-  groundingPolicy: ReportGenerationPlan['groundingPolicy']
-  currentSection: {
-    sectionId: string
-    name: string
-    order: number
-    level: number
-    parentSectionId: string | null
-    required: boolean
-    repeatable: boolean
-    purpose: string | null
-  }
-  applicableRules: {
-    writingStyle: PlannedReportSection['writingStyle'] extends infer Style
-      ? Style extends null
-        ? null
-        : Pick<
-            NonNullable<PlannedReportSection['writingStyle']>,
-            | 'tone'
-            | 'formality'
-            | 'technicality'
-            | 'objectivity'
-            | 'grammaticalPerson'
-            | 'verbTense'
-            | 'voice'
-            | 'detailLevel'
-            | 'narrativeStyle'
-          >
-      : never
-    sectionRules: WritingRule[]
-    globalRules: WritingRule[]
-  }
-  requiredInformation: {
-    factNames: string[]
-    expected: NonNullable<
-      PlannedReportSection['semantics']
-    >['expectedInformation']
-    excluded: NonNullable<
-      PlannedReportSection['semantics']
-    >['excludedInformation']
-    order: string[]
-  }
-  evidence: {
-    facts: StructuredFact[]
-    activities: Array<StructuredActivityItem & { index: number }>
-  }
-  relevantRelations: SectionRelationship[]
-  previousContext: Array<Pick<GeneratedReportSection, 'id' | 'name' | 'content'>>
+export interface ReportGenerationEvidence {
+  id: string
+  text: string
 }
 
-function normalize(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase('pt-BR')
-    .replace(/[^a-z0-9]+/g, '')
+function withoutEvidence<T>(value: T): T {
+  return JSON.parse(
+    JSON.stringify(value, (key, item) => (key === 'evidence' ? undefined : item)),
+  ) as T
 }
 
-function ruleRelevantToSection(rule: WritingRule, sectionName: string): boolean {
-  return (
-    rule.evidence.length === 0 ||
-    rule.evidence.some(
-      (evidence) =>
-        evidence.sectionName === null ||
-        normalize(evidence.sectionName) === normalize(sectionName),
-    )
-  )
-}
-
-function uniqueRules(rules: WritingRule[]): WritingRule[] {
-  return [...new Map(rules.map((rule) => [JSON.stringify(rule), rule])).values()]
-}
-
-function relevantPreviousSections(
-  previous: GeneratedReportSection[],
-  section: PlannedReportSection,
-): GenerationPromptContext['previousContext'] {
-  const immediate = previous.at(-1)
-  const parent = section.parentSectionId
-    ? previous.find((item) => item.id === section.parentSectionId)
-    : null
-  return [parent, immediate]
-    .filter((item): item is GeneratedReportSection => item !== null && item !== undefined)
-    .filter(
-      (item, index, items) =>
-        items.findIndex((candidate) => candidate.id === item.id) === index,
-    )
-    .map((item) => ({ id: item.id, name: item.name, content: item.content }))
-}
-
-export function buildGenerationPromptContext(
+function sectionContext(
   information: StructuredActivity,
-  plan: ReportGenerationPlan,
-  template: ReportTemplate,
   section: PlannedReportSection,
-  previousSections: GeneratedReportSection[] = [],
-): GenerationPromptContext {
-  const style = section.writingStyle
-  const sectionRules = style
-    ? [
-        ...style.introductionPatterns,
-        ...style.developmentPatterns,
-        ...style.conclusionPatterns,
-      ]
-    : []
-  const globalRules = uniqueRules(
-    [
-      ...template.writingPattern.vocabulary,
-      ...template.writingPattern.terminology,
-      ...template.writingPattern.sentencePatterns,
-      ...template.writingPattern.paragraphPatterns,
-      ...template.writingPattern.narrativePatterns,
-      ...template.writingPattern.recommendedPatterns,
-      ...template.writingPattern.forbiddenPatterns,
-    ].filter((rule) => ruleRelevantToSection(rule, section.sectionName)),
-  )
-  const expected = section.semantics?.expectedInformation ?? []
-  const relevantFactNames = new Set([
-    ...section.factNames.map(normalize),
-    ...expected.map((item) => normalize(item.name)),
-  ])
+  template: ReportTemplate,
+  evidence: ReportGenerationEvidence[],
+): unknown {
+  const indexedActivities = section.activityIndexes
+    .map((index) => information.activities[index])
+    .filter((activity): activity is NonNullable<typeof activity> => activity !== undefined)
   return {
-    groundingPolicy: plan.groundingPolicy,
-    currentSection: {
+    template: {
+      name: template.metadata.name,
+      documentType: template.metadata.documentType,
+    },
+    section: {
       sectionId: section.sectionId,
       name: section.sectionName,
-      order: section.order,
-      level: section.level,
-      parentSectionId: section.parentSectionId,
+      purpose: section.purpose,
       required: section.required,
       repeatable: section.repeatable,
-      purpose: section.purpose,
-    },
-    applicableRules: {
-      writingStyle: style
-        ? {
-            tone: style.tone,
-            formality: style.formality,
-            technicality: style.technicality,
-            objectivity: style.objectivity,
-            grammaticalPerson: style.grammaticalPerson,
-            verbTense: style.verbTense,
-            voice: style.voice,
-            detailLevel: style.detailLevel,
-            narrativeStyle: style.narrativeStyle,
-          }
-        : null,
-      sectionRules,
-      globalRules,
-    },
-    requiredInformation: {
-      factNames: section.factNames,
-      expected,
-      excluded: section.semantics?.excludedInformation ?? [],
-      order: section.semantics?.informationOrder ?? [],
-    },
-    evidence: {
-      facts: information.facts.filter((fact) => {
-        const names = [normalize(fact.name), normalize(fact.label)]
-        return names.some((name) =>
-          [...relevantFactNames].some(
-            (required) => name.includes(required) || required.includes(name),
-          ),
-        )
-      }),
-      activities: section.activityIndexes
-        .map((index) => information.activities[index])
-        .filter(
-          (activity): activity is StructuredActivityItem =>
-            activity !== undefined,
-        )
-        .map((activity, index) => ({
-          ...activity,
-          index: section.activityIndexes[index] ?? index,
-        })),
-    },
-    relevantRelations: [
-      ...(section.semantics?.relationships ?? []),
-      ...plan.templateContext.crossSectionRelations.filter(
-        (relation) =>
-          normalize(relation.targetSection) === normalize(section.sectionName),
+      expectedInformation: section.semantics?.expectedInformation.map(
+        (item) => ({
+          name: item.name,
+          description: item.description,
+          informationType: item.informationType,
+        }),
+      ) ?? [],
+      excludedInformation: section.semantics?.excludedInformation.map(
+        (item) => item.rule,
+      ) ?? [],
+      writingStyle: withoutEvidence(
+        section.writingStyle ?? template.writingPattern.globalStyle,
       ),
-    ],
-    previousContext: relevantPreviousSections(previousSections, section),
+    },
+    facts: information.facts,
+    activities:
+      indexedActivities.length > 0 ? indexedActivities : information.activities,
+    allowedEvidence: evidence,
   }
 }
 
-export function buildReportGenerationPrompt(
-  context: GenerationPromptContext,
+export function buildReportSectionGenerationPrompt(
+  information: StructuredActivity,
+  section: PlannedReportSection,
+  template: ReportTemplate,
+  evidence: ReportGenerationEvidence[],
 ): string {
-  return `Voce e o redator estruturado de relatorios do SIEAR.
+  return `Você redige UMA seção de relatório no SIEAR.
+Escreva somente a seção fornecida. Não crie, remova, renomeie ou misture seções.
+Os fatos vêm exclusivamente de FACTS e ACTIVITIES. O modelo de relatório só define estrutura e estilo, nunca fatos.
+Não invente datas, responsáveis, equipamentos, resultados, números, procedimentos ou problemas.
+Selecione usedEvidenceIds exclusivamente da lista allowedEvidence. Eles devem sustentar o conteúdo.
+Se os fatos não sustentarem um detalhe, omita o detalhe. Não escreva que uma informação está ausente.
+Retorne somente JSON válido, sem Markdown.
 
-O contexto ja determinou a secao atual. Voce deve somente preencher o conteudo desta secao, mantendo seu identificador e nome.
-StructuredActivity é a única fonte de fatos. O template define exclusivamente COMO escrever e nunca é fonte do que aconteceu.
-E proibido inventar ou inferir datas, equipamentos, resultados, problemas, procedimentos, responsaveis, numeros ou qualquer outro fato sem evidencia.
-Respeite pessoa, tempo verbal, voz, formalidade, regras, vocabulario, terminologia, padrao narrativo, informacoes esperadas e excluidas e relacoes semanticas aplicaveis.
-Nao resolva incertezas sem evidencia. Nao crie, remova, renomeie, reordene ou reorganize secoes.
-Cada afirmacao factual deve estar apoiada por usedEvidence copiada literalmente das evidencias do contexto.
-Retorne exclusivamente JSON valido, sem Markdown.
+FORMATO:
+{"sectionId":"id exato","name":"nome exato","content":"texto da seção","usedEvidenceIds":["evidence-001"]}
 
-Formato: {"sections":[{"sectionId":"identificador exato da secao atual","name":"nome exato","content":"texto","usedEvidence":["trecho literal"]}]}
-
-GENERATION PROMPT CONTEXT:
-${compactPromptJson(context)}`
+CONTEXTO DA SEÇÃO:
+${JSON.stringify(sectionContext(information, section, template, evidence))}`
 }

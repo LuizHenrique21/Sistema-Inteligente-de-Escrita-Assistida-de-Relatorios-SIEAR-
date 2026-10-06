@@ -1,8 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TemplateReview } from '../components/templates/TemplateReview'
+import { TemplateLibraryOverview } from '../components/templates/TemplateLibraryOverview'
+import { TemplateCreationProgress } from '../components/templates/TemplateCreationProgress'
+import { TemplateList } from '../components/templates/TemplateList'
 import { templatesService } from '../services/templates.service'
 import type { TemplateImportProgress } from '../types/template-import'
 import type { ReportTemplate } from '../domain/templates/report-template'
+import { estimateTemplateCreationTime } from '../services/template-creation-time'
+import styles from './ReportTemplatesPage.module.css'
 
 const TEMPLATE_PROGRESS_LABELS = [
   'Extração',
@@ -14,6 +19,10 @@ const TEMPLATE_PROGRESS_LABELS = [
   'Finalização',
 ] as const
 
+function progressPercent(step: TemplateImportProgress['step']): number {
+  return Math.round(((step - 1) / (TEMPLATE_PROGRESS_LABELS.length - 1)) * 100)
+}
+
 export function ReportTemplatesPage() {
   const [templates, setTemplates] = useState<ReportTemplate[]>([])
   const [draft, setDraft] = useState<ReportTemplate | null>(null)
@@ -22,6 +31,27 @@ export function ReportTemplatesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [stageStartedAt, setStageStartedAt] = useState<number | null>(null)
+  const [clock, setClock] = useState(() => Date.now())
+  const [showEditor, setShowEditor] = useState(false)
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false)
+  const progressStep = useRef<TemplateImportProgress['step'] | null>(null)
+  const percentage = progress ? progressPercent(progress.step) : 0
+  const templateSummary = useMemo(
+    () => ({
+      total: templates.length,
+      drafts: templates.filter((item) => item.metadata.status === 'draft')
+        .length,
+      confirmed: templates.filter(
+        (item) => item.metadata.status === 'confirmed',
+      ).length,
+    }),
+    [templates],
+  )
+  const timeEstimate =
+    progress && stageStartedAt !== null && isCreating
+      ? estimateTemplateCreationTime(progress, stageStartedAt, clock)
+      : null
 
   async function loadTemplates(preferredId?: string): Promise<void> {
     const result = await templatesService.getAll()
@@ -40,7 +70,12 @@ export function ReportTemplatesPage() {
   useEffect(() => {
     let active = true
     const stopProgress = templatesService.onCreationProgress((item) => {
-      if (active) setProgress(item)
+      if (!active) return
+      if (progressStep.current !== item.step) {
+        progressStep.current = item.step
+        setStageStartedAt(Date.now())
+      }
+      setProgress(item)
     })
     void templatesService
       .getAll()
@@ -63,8 +98,16 @@ export function ReportTemplatesPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!isCreating) return
+    const interval = window.setInterval(() => setClock(Date.now()), 1_000)
+    return () => window.clearInterval(interval)
+  }, [isCreating])
+
   async function selectTemplate(id: string): Promise<void> {
     setError('')
+    setShowEditor(false)
+    setShowTechnicalDetails(false)
     const result = await templatesService.getById(id)
     if (result.success && result.data) setDraft(structuredClone(result.data))
     else if (!result.success) setError(result.error.message)
@@ -74,20 +117,35 @@ export function ReportTemplatesPage() {
     if (isCreating) return
     setIsCreating(true)
     setError('')
+    const startedAt = Date.now()
+    progressStep.current = 1
+    setStageStartedAt(startedAt)
+    setClock(startedAt)
     setProgress({ step: 1, message: 'Lendo documento...' })
     try {
       const result = await templatesService.createFromDocument()
       if (result.success) {
+        setShowEditor(false)
+        setShowTechnicalDetails(false)
         setDraft(structuredClone(result.data))
         await loadTemplates(result.data.metadata.id)
+        progressStep.current = 7
+        setStageStartedAt(Date.now())
         setProgress({ step: 7, message: 'Modelo pronto para revisão.' })
-      } else if (result.error.code === 'CANCELED') setProgress(null)
-      else {
+      } else if (result.error.code === 'CANCELED') {
+        progressStep.current = null
+        setStageStartedAt(null)
+        setProgress(null)
+      } else {
         setError(result.error.message)
+        progressStep.current = null
+        setStageStartedAt(null)
         setProgress(null)
       }
     } catch {
       setError('Não foi possível iniciar a criação do modelo.')
+      progressStep.current = null
+      setStageStartedAt(null)
       setProgress(null)
     } finally {
       setIsCreating(false)
@@ -130,6 +188,7 @@ export function ReportTemplatesPage() {
 
   async function removeTemplate(): Promise<void> {
     if (!draft) return
+    if (!window.confirm(`Excluir o modelo “${draft.metadata.name}”?`)) return
     setIsSaving(true)
     setError('')
     try {
@@ -144,7 +203,7 @@ export function ReportTemplatesPage() {
   }
 
   return (
-    <section className="templates-page">
+    <section className={styles.page}>
       <header className="page-header">
         <div>
           <span className="eyebrow">Modelos aprendidos</span>
@@ -161,6 +220,8 @@ export function ReportTemplatesPage() {
         </button>
       </header>
 
+      <TemplateLibraryOverview {...templateSummary} />
+
       {error && (
         <div className="message error-message" role="alert">
           {error}
@@ -168,149 +229,166 @@ export function ReportTemplatesPage() {
       )}
 
       {progress && (
-        <div className="template-progress" aria-live="polite">
-          <strong>{progress.message}</strong>
-          <ol>
-            {TEMPLATE_PROGRESS_LABELS.map((label, index) => {
-              const step = index + 1
-              const state =
-                step < progress.step
-                  ? 'completed'
-                  : step === progress.step
-                    ? 'active'
-                    : 'pending'
-              return (
-                <li className={state} key={label}>
-                  {label}
-                </li>
-              )
-            })}
-          </ol>
-        </div>
+        <TemplateCreationProgress
+          progress={progress}
+          percentage={percentage}
+          labels={TEMPLATE_PROGRESS_LABELS}
+          estimate={timeEstimate}
+        />
       )}
 
       <div className="templates-workspace">
-        <aside className="template-list" aria-label="Modelos disponíveis">
-          {isLoading && <p>Carregando...</p>}
-          {!isLoading && templates.length === 0 && (
-            <p className="empty-hint">Nenhum modelo.</p>
-          )}
-          {templates.map((item) => (
-            <button
-              type="button"
-              className={`template-item ${draft?.metadata.id === item.metadata.id ? 'active' : ''}`}
-              onClick={() => void selectTemplate(item.metadata.id)}
-              key={item.metadata.id}
-            >
-              <strong>{item.metadata.name}</strong>
-              <span className={`template-status ${item.metadata.status}`}>
-                {item.metadata.status}
-              </span>
-              <span>versão {item.version}</span>
-            </button>
-          ))}
-        </aside>
+        <TemplateList
+          templates={templates}
+          selectedId={draft?.metadata.id}
+          isLoading={isLoading}
+          onSelect={(id) => void selectTemplate(id)}
+        />
 
         <div className="template-content">
           {draft ? (
-            <article className="template-details">
-              <div className="template-metadata-header">
+            <article className={styles.details}>
+              <header className={styles.modelHeader}>
                 <div>
                   <span
-                    className={`badge template-status ${draft.metadata.status}`}
+                    className={
+                      draft.metadata.status === 'confirmed'
+                        ? styles.confirmed
+                        : styles.draft
+                    }
                   >
-                    {draft.metadata.status}
+                    {draft.metadata.status === 'confirmed'
+                      ? 'Pronto para uso'
+                      : 'Em revisão'}
                   </span>
-                  <span className="badge">versão {draft.version}</span>
+                  <h3>{draft.metadata.name}</h3>
+                  <p>{draft.metadata.description}</p>
                 </div>
-                <small>ID: {draft.metadata.id}</small>
-              </div>
-              <div className="form-grid">
-                <label>
-                  Nome
-                  <input
-                    value={draft.metadata.name}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        metadata: {
-                          ...draft.metadata,
-                          name: event.target.value,
-                        },
-                      })
-                    }
-                    disabled={isSaving}
-                  />
-                </label>
-                <label>
-                  Tipo documental
-                  <input value={draft.metadata.documentType} disabled />
-                </label>
-                <label className="full-field">
-                  Descrição
-                  <textarea
-                    value={draft.metadata.description}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        metadata: {
-                          ...draft.metadata,
-                          description: event.target.value,
-                        },
-                      })
-                    }
-                    disabled={isSaving}
-                  />
-                </label>
-              </div>
-              <dl className="template-lifecycle">
+                <span className={styles.documentType}>
+                  {draft.metadata.documentType}
+                </span>
+              </header>
+              {draft.metadata.status === 'draft' && (
+                <div className="review-notice">
+                  Este modelo ainda não está disponível para geração. Confirme-o
+                  quando estiver satisfeito com o resumo.
+                </div>
+              )}
+              <dl className={styles.quickFacts}>
                 <div>
-                  <dt>Criado em</dt>
-                  <dd>
-                    {new Date(draft.metadata.createdAt).toLocaleString('pt-BR')}
-                  </dd>
+                  <dt>Seções</dt>
+                  <dd>{draft.structurePattern.sections.length}</dd>
                 </div>
                 <div>
-                  <dt>Atualizado em</dt>
+                  <dt>Campos</dt>
+                  <dd>{draft.fields.length}</dd>
+                </div>
+                <div>
+                  <dt>Estilo</dt>
+                  <dd>{draft.writingPattern.globalStyle.formality}</dd>
+                </div>
+                <div>
+                  <dt>Atualizado</dt>
                   <dd>
-                    {new Date(draft.metadata.updatedAt).toLocaleString('pt-BR')}
+                    {new Date(draft.metadata.updatedAt).toLocaleDateString(
+                      'pt-BR',
+                    )}
                   </dd>
                 </div>
               </dl>
-
-              <TemplateReview template={draft} />
-
-              <div className="detail-actions">
-                <button
-                  type="button"
-                  onClick={() => void save()}
-                  disabled={
-                    isSaving ||
-                    !draft.metadata.name.trim() ||
-                    !draft.metadata.description.trim()
-                  }
-                >
-                  {isSaving ? 'Salvando...' : 'Salvar nome e descrição'}
-                </button>
+              <div className={styles.primaryActions}>
                 {draft.metadata.status === 'draft' && (
                   <button
-                    className="secondary-button"
                     type="button"
                     onClick={() => void confirmTemplate()}
                     disabled={isSaving}
                   >
-                    Confirmar modelo
+                    {isSaving ? 'Salvando...' : 'Confirmar e usar'}
                   </button>
                 )}
                 <button
-                  className="danger-button"
+                  className="secondary-button"
                   type="button"
-                  onClick={() => void removeTemplate()}
+                  onClick={() => setShowEditor((value) => !value)}
                   disabled={isSaving}
                 >
-                  Excluir
+                  {showEditor ? 'Fechar edição' : 'Editar informações'}
                 </button>
+                <details className={styles.moreActions}>
+                  <summary>Mais ações</summary>
+                  <button
+                    className="danger-button"
+                    type="button"
+                    onClick={() => void removeTemplate()}
+                    disabled={isSaving}
+                  >
+                    Excluir modelo
+                  </button>
+                </details>
               </div>
+              {showEditor && (
+                <div className={`form-grid ${styles.editor}`}>
+                  <label>
+                    Nome
+                    <input
+                      value={draft.metadata.name}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          metadata: {
+                            ...draft.metadata,
+                            name: event.target.value,
+                          },
+                        })
+                      }
+                      disabled={isSaving}
+                    />
+                  </label>
+                  <label>
+                    Tipo documental
+                    <input value={draft.metadata.documentType} disabled />
+                  </label>
+                  <label className="full-field">
+                    Descrição
+                    <textarea
+                      value={draft.metadata.description}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          metadata: {
+                            ...draft.metadata,
+                            description: event.target.value,
+                          },
+                        })
+                      }
+                      disabled={isSaving}
+                    />
+                  </label>
+                  <button
+                    className={styles.saveButton}
+                    type="button"
+                    onClick={() => void save()}
+                    disabled={
+                      isSaving ||
+                      !draft.metadata.name.trim() ||
+                      !draft.metadata.description.trim()
+                    }
+                  >
+                    {isSaving ? 'Salvando...' : 'Salvar nome e descrição'}
+                  </button>
+                </div>
+              )}
+
+              <details
+                className={styles.technicalDetails}
+                open={showTechnicalDetails}
+                onToggle={(event) =>
+                  setShowTechnicalDetails(event.currentTarget.open)
+                }
+              >
+                <summary>Ver análise técnica e evidências</summary>
+                <TemplateReview template={draft} />
+              </details>
             </article>
           ) : (
             <p>Importe ou selecione um modelo.</p>

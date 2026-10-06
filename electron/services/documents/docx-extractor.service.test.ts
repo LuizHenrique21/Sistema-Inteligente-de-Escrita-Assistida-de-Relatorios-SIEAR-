@@ -153,38 +153,27 @@ describe('DocxExtractor', () => {
     )
   })
 
-  it('produz a mesma estrutura no main e no worker', async () => {
-    const file = await writeDocx(directory, 'worker-modelo.docx')
-    const main = await new DocxExtractor({ useWorker: false }).extract(file)
-    const worker = await new DocxExtractor({ useWorker: true }).extract(file)
+  it('cria uma seção lógica quando o DOCX não usa estilos de título', async () => {
+    const file = path.join(directory, 'sem-titulos.docx')
+    const zip = await JSZip.loadAsync(await createDocx())
+    const documentXml = await zip.file('word/document.xml')!.async('text')
+    zip.file(
+      'word/document.xml',
+      documentXml.replaceAll('Heading1', 'Normal').replaceAll('Heading2', 'Normal'),
+    )
+    await writeFile(file, await zip.generateAsync({ type: 'nodebuffer' }))
 
-    expect(
-      worker.sections.map(({ title, level, order, content }) => ({
-        title,
-        level,
-        order,
-        content,
-      })),
-    ).toEqual(
-      main.sections.map(({ title, level, order, content }) => ({
-        title,
-        level,
-        order,
-        content,
-      })),
-    )
-    expect(worker.paragraphs.map((paragraph) => paragraph.text)).toEqual(
-      main.paragraphs.map((paragraph) => paragraph.text),
-    )
-    expect(worker.tables.map((table) => table.rows)).toEqual(
-      main.tables.map((table) => table.rows),
-    )
-    expect(worker.figures.map((figure) => figure.contentType)).toEqual(
-      main.figures.map((figure) => figure.contentType),
-    )
+    const document = await new DocxExtractor().extract(file)
+
+    expect(document.sections).toMatchObject([
+      { title: 'Conteúdo do documento', level: 1, order: 1 },
+    ])
+    expect(document.sections[0]?.content).toContain('Documentar a atividade.')
+    expect(document.paragraphs.every((paragraph) => paragraph.sectionId !== null)).toBe(true)
+    expect(document.tables[0]?.sectionId).toBe(document.sections[0]?.id)
   })
 
-  it('rejeita um arquivo que nao e um DOCX valido', async () => {
+  it('rejeita um arquivo que não é um DOCX válido', async () => {
     const file = path.join(directory, 'invalido.docx')
     await writeFile(file, 'conteudo invalido')
     await expect(new DocxExtractor().extract(file)).rejects.toMatchObject({

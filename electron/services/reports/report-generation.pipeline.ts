@@ -1,5 +1,6 @@
 import type {
   GenerateReportResult,
+  ReportGenerationProgress,
   StructuredActivity,
 } from '../../../src/types/generated-report'
 import { getLogger } from '../../infrastructure/logging/logger.runtime'
@@ -28,6 +29,7 @@ export interface PipelineReportWriter {
     information: StructuredActivity,
     plan: ReportGenerationPlan,
     template: ReportTemplate,
+    onProgress?: (progress: ReportGenerationProgress) => void,
   ): Promise<GeneratedReport>
 }
 
@@ -41,17 +43,39 @@ export class ReportGenerationPipeline {
   async generate(
     text: string,
     template: ReportTemplate,
+    onProgress?: (progress: ReportGenerationProgress) => void,
   ): Promise<GenerateReportResult> {
     const timer = logger.startTimer('Report generation', {
       templateId: template.metadata.id,
     })
     try {
+      onProgress?.({
+        stage: 'extracting',
+        message: 'Analisando as informações fornecidas...',
+        completedSections: 0,
+        totalSections: 0,
+        sectionName: null,
+      })
       const information: StructuredActivity = await this.extractor.extract(
         text,
         template,
       )
+      onProgress?.({
+        stage: 'planning',
+        message: 'Organizando a estrutura do relatório...',
+        completedSections: 0,
+        totalSections: 0,
+        sectionName: null,
+      })
       const plan = this.planner.plan(information, template)
       if (plan.missing.length > 0) {
+        onProgress?.({
+          stage: 'finalizing',
+          message: 'Informações prontas para sua revisão.',
+          completedSections: 0,
+          totalSections: 0,
+          sectionName: null,
+        })
         timer.end('Report generation requires input', {
           missing: plan.missing.length,
         })
@@ -63,7 +87,16 @@ export class ReportGenerationPipeline {
           questions: plan.missing.map((item) => item.question),
         }
       }
-      const data = await this.generator.generate(information, plan, template)
+      const data = onProgress
+        ? await this.generator.generate(information, plan, template, onProgress)
+        : await this.generator.generate(information, plan, template)
+      onProgress?.({
+        stage: 'finalizing',
+        message: 'Finalizando o relatório...',
+        completedSections: plan.sections.length,
+        totalSections: plan.sections.length,
+        sectionName: null,
+      })
       timer.end('Report generation completed', {
         sections: data.sections.length,
       })

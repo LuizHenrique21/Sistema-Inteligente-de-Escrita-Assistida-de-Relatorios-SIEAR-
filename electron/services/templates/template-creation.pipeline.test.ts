@@ -153,6 +153,7 @@ describe('TemplateCreationPipeline', () => {
       expect.objectContaining({ document, structure }),
       structure,
       writing,
+      expect.objectContaining({ onProgress: expect.any(Function) }),
     )
     expect(builder.build).toHaveBeenCalledWith({
       document,
@@ -480,6 +481,7 @@ describe('TemplateCreationPipeline', () => {
       expect.objectContaining({ document, structure: richStructure }),
       richStructure,
       richWriting,
+      expect.objectContaining({ onProgress: expect.any(Function) }),
     )
     expect(formattingAnalyzer.analyze).toHaveBeenCalledWith(
       expect.objectContaining({ document, structure: richStructure }),

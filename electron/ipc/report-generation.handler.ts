@@ -1,6 +1,7 @@
 import type {
   GenerateReportRequest,
   GenerateReportResult,
+  ReportGenerationProgress,
 } from '../../src/types/generated-report'
 import type { ReportTemplate } from '../../src/domain/templates/report-template'
 import { ReportGenerationServiceError } from '../services/ai/report-generation.error'
@@ -11,6 +12,7 @@ export interface ReportGenerator {
   generate(
     text: string,
     template: ReportTemplate,
+    onProgress?: (progress: ReportGenerationProgress) => void,
   ): Promise<GenerateReportResult>
 }
 
@@ -35,7 +37,10 @@ export function createReportGenerationHandler(
   generator: ReportGenerator,
   templates: TemplateFinder,
 ) {
-  return async (request: unknown): Promise<GenerateReportResult> => {
+  return async (
+    request: unknown,
+    onProgress?: (progress: ReportGenerationProgress) => void,
+  ): Promise<GenerateReportResult> => {
     if (!isValidRequest(request)) {
       return {
         success: false,
@@ -57,7 +62,9 @@ export function createReportGenerationHandler(
           },
         }
       }
-      return generator.generate(request.text.trim(), template)
+      return onProgress
+        ? generator.generate(request.text.trim(), template, onProgress)
+        : generator.generate(request.text.trim(), template)
     } catch (error: unknown) {
       if (
         error instanceof ReportGenerationServiceError ||

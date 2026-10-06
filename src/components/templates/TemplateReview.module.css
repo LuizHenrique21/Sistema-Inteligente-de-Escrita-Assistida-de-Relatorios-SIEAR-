@@ -1,0 +1,136 @@
+.review {
+  display: grid;
+  gap: 18px;
+  margin-top: 26px;
+}
+.review > section {
+  padding: 18px;
+  border: 1px solid #dce7e0;
+  border-radius: 14px;
+  background: #fbfdfc;
+}
+.review h4 {
+  margin: 0 0 12px;
+  color: #214d39;
+}
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-color: #cde3d4 !important;
+  background: linear-gradient(120deg, #f1f9f3, #fbfdfc) !important;
+}
+.summary p {
+  max-width: 520px;
+  margin: 6px 0 0;
+  color: #5a7467;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.summary dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(74px, 1fr));
+  gap: 8px;
+  min-width: 190px;
+  margin: 0;
+}
+.summary dl div {
+  padding: 8px;
+  border-radius: 9px;
+  background: #fff;
+  text-align: center;
+}
+.summary dt {
+  color: #708278;
+  font-size: 0.68rem;
+}
+.summary dd {
+  margin: 2px 0 0;
+  color: #176344;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.patternSection {
+  margin: 8px 0 0;
+  border: 1px solid #e1eae4;
+  border-radius: 10px;
+  background: #fff;
+}
+.patternSection summary {
+  padding: 10px 12px;
+  color: #31704f;
+  font-weight: 700;
+  cursor: pointer;
+}
+.patternSection > .objectGrid {
+  margin: 0;
+  padding: 0 12px 12px;
+}
+.objectGrid {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+.objectGrid > div {
+  padding: 10px;
+  border-left: 2px solid #c4dbcc;
+  background: #f2f7f4;
+}
+.objectGrid dt {
+  margin-bottom: 4px;
+  color: #527063;
+  font-family: ui-monospace, monospace;
+  font-size: 0.76rem;
+}
+.objectGrid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+.richList {
+  margin: 7px 0;
+  padding-left: 20px;
+}
+.richList > li + li {
+  margin-top: 8px;
+}
+.emptyHint {
+  color: #6b7c73;
+}
+@media (max-width: 650px) {
+  .summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .summary dl {
+    min-width: 0;
+  }
+}
+:global([data-theme='dark']) .review > section {
+  border-color: #2d493a;
+  background: #17231d;
+}
+:global([data-theme='dark']) .review h4 {
+  color: #e0f0e7;
+}
+:global([data-theme='dark']) .summary {
+  background: linear-gradient(120deg, #193224, #17231d) !important;
+}
+:global([data-theme='dark']) .summary p,
+:global([data-theme='dark']) .summary dt,
+:global([data-theme='dark']) .objectGrid dt {
+  color: #a4c0af;
+}
+:global([data-theme='dark']) .summary dl div,
+:global([data-theme='dark']) .patternSection {
+  border-color: #2f4b3b;
+  background: #1d3026;
+}
+:global([data-theme='dark']) .summary dd,
+:global([data-theme='dark']) .objectGrid dd {
+  color: #d9ece1;
+}
+:global([data-theme='dark']) .objectGrid > div {
+  background: #1d3026;
+}

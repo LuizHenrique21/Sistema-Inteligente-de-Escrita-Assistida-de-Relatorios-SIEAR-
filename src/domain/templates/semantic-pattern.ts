@@ -30,9 +30,16 @@ export interface ExpectedInformation {
 }
 
 export interface SectionRelationship {
+  sourceSection?: string
   targetSection: string
   relationship: string
   evidence: SemanticEvidence[]
+}
+
+export interface GlobalSemanticProfile {
+  documentPurpose: string
+  overallInformationFlow: string[]
+  generalSemanticRules: SemanticRule[]
 }
 
 export interface SectionSemanticPattern {
@@ -66,6 +73,7 @@ export interface ActivitySemanticPattern {
 
 export interface SemanticPattern {
   documentType: string
+  globalProfile?: GlobalSemanticProfile
   sections: SectionSemanticPattern[]
   activityPatterns: ActivitySemanticPattern[]
   fields: SemanticFieldPattern[]
