@@ -1,15 +1,11 @@
 import type {
   GenerateReportRequest,
   GenerateReportResult,
+  ExportReportDocxRequest,
+  ExportReportDocxResult,
+  ReportGenerationProgress,
 } from './generated-report'
-import type { TemplatesApi } from './report-template'
-import type { DocumentsApi } from './template-import'
-
-export interface AppInfo {
-  name: string
-  version: string
-  environment: 'development' | 'production'
-}
+import type { TemplatesApi } from './templates'
 
 export interface AiGenerateRequest {
   prompt: string
@@ -72,7 +68,6 @@ export type ExtractReportInformationResult =
   ExtractReportInformationSuccess | ExtractReportInformationFailure
 
 export interface SiearApi {
-  app: { getInfo: () => Promise<AppInfo> }
   ai: {
     generate: (request: AiGenerateRequest) => Promise<AiGenerateResult>
     extractReportInformation: (
@@ -81,7 +76,12 @@ export interface SiearApi {
     generateReport: (
       request: GenerateReportRequest,
     ) => Promise<GenerateReportResult>
+    onReportGenerationProgress: (
+      callback: (progress: ReportGenerationProgress) => void,
+    ) => () => void
+    exportReportDocx: (
+      request: ExportReportDocxRequest,
+    ) => Promise<ExportReportDocxResult>
   }
   templates: TemplatesApi
-  documents: DocumentsApi
 }

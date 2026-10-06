@@ -1,0 +1,139 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid #e0eae4;
+  border-radius: 15px;
+  background: #f7faf8;
+}
+.list > p {
+  padding: 10px;
+  color: #6b7c73;
+}
+.item,
+.activeItem {
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+  border: 0;
+  border-radius: 10px;
+  color: #30493e;
+  background: #edf4ef;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.item:hover {
+  color: #1d503a;
+  background: #e2eee6;
+}
+
+.item:hover span {
+  color: #5b7568;
+}
+
+.item:hover .status {
+  color: #7a4b00;
+}
+
+.item:hover .confirmed {
+  color: #175c38;
+}
+.item span,
+.activeItem span {
+  color: #6b7c73;
+  font-size: 0.8rem;
+}
+.type {
+  overflow: hidden;
+  color: #577465 !important;
+  font-size: 0.72rem !important;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activeItem {
+  color: #fff;
+  background: #245c43;
+}
+.activeItem span,
+.activeItem .type {
+  color: #d7e9df !important;
+}
+.status {
+  width: fit-content;
+  padding: 3px 6px;
+  border-radius: 999px;
+  font-size: 0.68rem !important;
+  font-weight: 800;
+}
+.draft {
+  color: #7a4b00 !important;
+  background: #fff1c7;
+}
+.confirmed {
+  color: #175c38 !important;
+  background: #dff3e7;
+}
+.activeItem .status {
+  color: inherit !important;
+  background: rgba(255, 255, 255, 0.16);
+}
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 18px;
+  color: #5a7065;
+  text-align: center;
+}
+.empty > span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  color: #237051;
+  background: #e4f3e9;
+  font-weight: 800;
+}
+.empty strong {
+  color: #294d3c;
+  font-size: 0.84rem;
+}
+.empty p {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+@media (max-width: 850px) {
+  .list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+  .empty {
+    grid-column: 1 / -1;
+  }
+}
+:global([data-theme='dark']) .list {
+  border-color: #2d493a;
+  background: #17231d;
+}
+:global([data-theme='dark']) .item {
+  color: #d8eadf;
+  background: #1d3026;
+}
+:global([data-theme='dark']) .item:hover {
+  color: #ecf8f0;
+  background: #294634;
+}
+:global([data-theme='dark']) .item span {
+  color: #a9c2b2;
+}
+:global([data-theme='dark']) .empty {
+  color: #b7d0c1;
+}
+:global([data-theme='dark']) .empty strong {
+  color: #e0f0e7;
+}

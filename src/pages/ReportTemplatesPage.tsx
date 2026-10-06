@@ -1,162 +1,226 @@
-import { useState } from 'react'
-import { documentsService } from '../services/documents.service'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { TemplateReview } from '../components/templates/TemplateReview'
+import { TemplateLibraryOverview } from '../components/templates/TemplateLibraryOverview'
+import { TemplateCreationProgress } from '../components/templates/TemplateCreationProgress'
+import { TemplateList } from '../components/templates/TemplateList'
 import { templatesService } from '../services/templates.service'
-import type {
-  ReportFormality,
-  ReportField,
-  ReportFieldType,
-  ReportSection,
-  ReportTemplate,
-} from '../types/report-template'
+import type { TemplateImportProgress } from '../types/template-import'
+import type { ReportTemplate } from '../domain/templates/report-template'
+import { estimateTemplateCreationTime } from '../services/template-creation-time'
+import styles from './ReportTemplatesPage.module.css'
 
-interface ReportTemplatesPageProps {
-  templates: ReportTemplate[]
-  selectedId: string
-  onSelect(id: string): void
-  onChanged(): Promise<void>
+const TEMPLATE_PROGRESS_LABELS = [
+  'Extração',
+  'Estrutura',
+  'Escrita',
+  'Semântica',
+  'Formatação',
+  'Consolidação',
+  'Finalização',
+] as const
+
+function progressPercent(step: TemplateImportProgress['step']): number {
+  return Math.round(((step - 1) / (TEMPLATE_PROGRESS_LABELS.length - 1)) * 100)
 }
 
-function emptySection(order: number): ReportSection {
-  return {
-    id: crypto.randomUUID(),
-    name: '',
-    description: '',
-    required: true,
-    order,
-  }
-}
-
-function emptyTemplate(): ReportTemplate {
-  return {
-    id: crypto.randomUUID(),
-    name: '',
-    description: '',
-    objective: '',
-    tone: 'formal',
-    style: 'technical',
-    formality: 'medium',
-    sections: [emptySection(1)],
-    fields: [],
-    writingRules: [],
-    recommendedVocabulary: [],
-    forbiddenExpressions: [],
-  }
-}
-
-function emptyField(): ReportField {
-  return {
-    id: crypto.randomUUID(),
-    name: '',
-    label: '',
-    type: 'text',
-    required: false,
-    description: '',
-  }
-}
-
-export function ReportTemplatesPage({
-  templates,
-  selectedId,
-  onSelect,
-  onChanged,
-}: ReportTemplatesPageProps) {
+export function ReportTemplatesPage() {
+  const [templates, setTemplates] = useState<ReportTemplate[]>([])
   const [draft, setDraft] = useState<ReportTemplate | null>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [progress, setProgress] = useState<TemplateImportProgress | null>(null)
   const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [isCreating, setIsCreating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [showCreationOptions, setShowCreationOptions] = useState(false)
-  const [isImporting, setIsImporting] = useState(false)
-  const [importedFileName, setImportedFileName] = useState<string | null>(null)
-  const selected = templates.find((template) => template.id === selectedId)
+  const [stageStartedAt, setStageStartedAt] = useState<number | null>(null)
+  const [clock, setClock] = useState(() => Date.now())
+  const [showEditor, setShowEditor] = useState(false)
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false)
+  const progressStep = useRef<TemplateImportProgress['step'] | null>(null)
+  const percentage = progress ? progressPercent(progress.step) : 0
+  const templateSummary = useMemo(
+    () => ({
+      total: templates.length,
+      drafts: templates.filter((item) => item.metadata.status === 'draft')
+        .length,
+      confirmed: templates.filter(
+        (item) => item.metadata.status === 'confirmed',
+      ).length,
+    }),
+    [templates],
+  )
+  const timeEstimate =
+    progress && stageStartedAt !== null && isCreating
+      ? estimateTemplateCreationTime(progress, stageStartedAt, clock)
+      : null
 
-  function startCreate(): void {
-    setDraft(emptyTemplate())
-    setEditingId(null)
-    setError('')
-    setShowCreationOptions(false)
-    setImportedFileName(null)
-  }
-
-  async function importTemplate(): Promise<void> {
-    if (isImporting) return
-    setIsImporting(true)
-    setError('')
-    const result = await documentsService.selectAndAnalyzeTemplate()
-    setIsImporting(false)
-    if (result.success) {
-      setDraft(result.data)
-      setEditingId(null)
-      setImportedFileName(result.fileName)
-      setShowCreationOptions(false)
-    } else if (!result.canceled) {
+  async function loadTemplates(preferredId?: string): Promise<void> {
+    const result = await templatesService.getAll()
+    if (!result.success) {
       setError(result.error.message)
+      return
     }
+    setTemplates(result.data)
+    const selected =
+      result.data.find((item) => item.metadata.id === preferredId) ??
+      result.data[0] ??
+      null
+    setDraft(selected ? structuredClone(selected) : null)
   }
 
-  function startEdit(template: ReportTemplate): void {
-    setDraft(structuredClone(template))
-    setEditingId(template.id)
-    setError('')
-    setShowCreationOptions(false)
-    setImportedFileName(null)
-  }
-
-  function updateSection(index: number, change: Partial<ReportSection>): void {
-    if (!draft) return
-    setDraft({
-      ...draft,
-      sections: draft.sections.map((section, sectionIndex) =>
-        sectionIndex === index ? { ...section, ...change } : section,
-      ),
+  useEffect(() => {
+    let active = true
+    const stopProgress = templatesService.onCreationProgress((item) => {
+      if (!active) return
+      if (progressStep.current !== item.step) {
+        progressStep.current = item.step
+        setStageStartedAt(Date.now())
+      }
+      setProgress(item)
     })
+    void templatesService
+      .getAll()
+      .then((result) => {
+        if (!active) return
+        if (result.success) {
+          setTemplates(result.data)
+          setDraft(result.data[0] ? structuredClone(result.data[0]) : null)
+        } else setError(result.error.message)
+      })
+      .catch(() => {
+        if (active) setError('Não foi possível carregar os modelos.')
+      })
+      .finally(() => {
+        if (active) setIsLoading(false)
+      })
+    return () => {
+      active = false
+      stopProgress()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isCreating) return
+    const interval = window.setInterval(() => setClock(Date.now()), 1_000)
+    return () => window.clearInterval(interval)
+  }, [isCreating])
+
+  async function selectTemplate(id: string): Promise<void> {
+    setError('')
+    setShowEditor(false)
+    setShowTechnicalDetails(false)
+    const result = await templatesService.getById(id)
+    if (result.success && result.data) setDraft(structuredClone(result.data))
+    else if (!result.success) setError(result.error.message)
+  }
+
+  async function createFromDocument(): Promise<void> {
+    if (isCreating) return
+    setIsCreating(true)
+    setError('')
+    const startedAt = Date.now()
+    progressStep.current = 1
+    setStageStartedAt(startedAt)
+    setClock(startedAt)
+    setProgress({ step: 1, message: 'Lendo documento...' })
+    try {
+      const result = await templatesService.createFromDocument()
+      if (result.success) {
+        setShowEditor(false)
+        setShowTechnicalDetails(false)
+        setDraft(structuredClone(result.data))
+        await loadTemplates(result.data.metadata.id)
+        progressStep.current = 7
+        setStageStartedAt(Date.now())
+        setProgress({ step: 7, message: 'Modelo pronto para revisão.' })
+      } else if (result.error.code === 'CANCELED') {
+        progressStep.current = null
+        setStageStartedAt(null)
+        setProgress(null)
+      } else {
+        setError(result.error.message)
+        progressStep.current = null
+        setStageStartedAt(null)
+        setProgress(null)
+      }
+    } catch {
+      setError('Não foi possível iniciar a criação do modelo.')
+      progressStep.current = null
+      setStageStartedAt(null)
+      setProgress(null)
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   async function save(): Promise<void> {
     if (!draft || isSaving) return
     setIsSaving(true)
     setError('')
-    const result = editingId
-      ? await templatesService.update(editingId, draft)
-      : await templatesService.create(draft)
-
-    if (result.success) {
-      setDraft(null)
-      setEditingId(null)
-      setImportedFileName(null)
-      onSelect(result.data.id)
-      await onChanged()
-    } else {
-      setError(result.error.message)
+    try {
+      const result = await templatesService.update(draft)
+      if (result.success) {
+        setDraft(structuredClone(result.data))
+        await loadTemplates(result.data.metadata.id)
+      } else setError(result.error.message)
+    } catch {
+      setError('Não foi possível atualizar o modelo.')
+    } finally {
+      setIsSaving(false)
     }
-    setIsSaving(false)
   }
 
-  async function remove(id: string): Promise<void> {
-    const result = await templatesService.delete(id)
-    if (result.success) {
-      setDraft(null)
-      await onChanged()
-    } else setError(result.error.message)
+  async function confirmTemplate(): Promise<void> {
+    if (!draft || draft.metadata.status !== 'draft') return
+    setIsSaving(true)
+    setError('')
+    try {
+      const result = await templatesService.confirm(draft.metadata.id)
+      if (result.success) {
+        setDraft(structuredClone(result.data))
+        await loadTemplates(result.data.metadata.id)
+      } else setError(result.error.message)
+    } catch {
+      setError('Não foi possível confirmar o modelo.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function removeTemplate(): Promise<void> {
+    if (!draft) return
+    if (!window.confirm(`Excluir o modelo “${draft.metadata.name}”?`)) return
+    setIsSaving(true)
+    setError('')
+    try {
+      const result = await templatesService.delete(draft.metadata.id)
+      if (result.success) await loadTemplates()
+      else setError(result.error.message)
+    } catch {
+      setError('Não foi possível excluir o modelo.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
-    <section className="templates-page">
+    <section className={styles.page}>
       <header className="page-header">
         <div>
-          <span className="eyebrow">Configuração em memória</span>
-          <h2>Modelos de Relatório</h2>
-          <p>
-            Defina a estrutura e as regras que orientarão relatórios futuros.
-          </p>
+          <span className="eyebrow">Modelos aprendidos</span>
+          <h2>Modelos</h2>
+          <p>Crie e revise modelos aprendidos sem perder seus padrões ricos.</p>
         </div>
         <button
           className="compact-button"
           type="button"
-          onClick={() => setShowCreationOptions(true)}
+          onClick={() => void createFromDocument()}
+          disabled={isCreating}
         >
-          + Novo modelo
+          {isCreating ? 'Analisando DOCX...' : '+ Importar um DOCX'}
         </button>
       </header>
+
+      <TemplateLibraryOverview {...templateSummary} />
 
       {error && (
         <div className="message error-message" role="alert">
@@ -164,504 +228,170 @@ export function ReportTemplatesPage({
         </div>
       )}
 
+      {progress && (
+        <TemplateCreationProgress
+          progress={progress}
+          percentage={percentage}
+          labels={TEMPLATE_PROGRESS_LABELS}
+          estimate={timeEstimate}
+        />
+      )}
+
       <div className="templates-workspace">
-        <aside className="template-list" aria-label="Modelos disponíveis">
-          {templates.map((template) => (
-            <button
-              className={
-                template.id === selectedId
-                  ? 'template-item active'
-                  : 'template-item'
-              }
-              type="button"
-              key={template.id}
-              onClick={() => onSelect(template.id)}
-            >
-              <strong>{template.name}</strong>
-              <span>{template.sections.length} seções</span>
-            </button>
-          ))}
-        </aside>
+        <TemplateList
+          templates={templates}
+          selectedId={draft?.metadata.id}
+          isLoading={isLoading}
+          onSelect={(id) => void selectTemplate(id)}
+        />
 
         <div className="template-content">
-          {showCreationOptions && !draft ? (
-            <div className="creation-options">
-              <h3>Como deseja criar?</h3>
-              <button
-                className="creation-option recommended"
-                type="button"
-                onClick={() => void importTemplate()}
-                disabled={isImporting}
-              >
-                <strong>
-                  {isImporting
-                    ? 'Analisando documento...'
-                    : 'Importar relatório existente'}
-                </strong>
-                <span>Recomendado · DOCX ou TXT</span>
-                <p>
-                  O SIEAR identifica estrutura, campos e regras para você
-                  revisar.
-                </p>
-              </button>
-              <button
-                className="creation-option"
-                type="button"
-                onClick={startCreate}
-              >
-                <strong>Criar manualmente</strong>
-                <span>Opção secundária</span>
-                <p>Configure cada característica do modelo desde o início.</p>
-              </button>
-              <button
-                className="text-button"
-                type="button"
-                onClick={() => setShowCreationOptions(false)}
-              >
-                Cancelar
-              </button>
-            </div>
-          ) : draft ? (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault()
-                void save()
-              }}
-            >
-              <h3>
-                {editingId
-                  ? 'Editar modelo'
-                  : importedFileName
-                    ? 'Revisar modelo importado'
-                    : 'Novo modelo manual'}
-              </h3>
-              {importedFileName && (
-                <p className="review-notice">
-                  Analise os dados identificados em{' '}
-                  <strong>{importedFileName}</strong>. O modelo só será
-                  adicionado após sua confirmação.
-                </p>
+          {draft ? (
+            <article className={styles.details}>
+              <header className={styles.modelHeader}>
+                <div>
+                  <span
+                    className={
+                      draft.metadata.status === 'confirmed'
+                        ? styles.confirmed
+                        : styles.draft
+                    }
+                  >
+                    {draft.metadata.status === 'confirmed'
+                      ? 'Pronto para uso'
+                      : 'Em revisão'}
+                  </span>
+                  <h3>{draft.metadata.name}</h3>
+                  <p>{draft.metadata.description}</p>
+                </div>
+                <span className={styles.documentType}>
+                  {draft.metadata.documentType}
+                </span>
+              </header>
+              {draft.metadata.status === 'draft' && (
+                <div className="review-notice">
+                  Este modelo ainda não está disponível para geração. Confirme-o
+                  quando estiver satisfeito com o resumo.
+                </div>
               )}
-              <div className="form-grid">
-                <label>
-                  Nome
-                  <input
-                    value={draft.name}
-                    onChange={(event) =>
-                      setDraft({ ...draft, name: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Descrição
-                  <textarea
-                    rows={2}
-                    value={draft.description}
-                    onChange={(event) =>
-                      setDraft({ ...draft, description: event.target.value })
-                    }
-                  />
-                </label>
-                <label className="full-field">
-                  Objetivo
-                  <textarea
-                    rows={2}
-                    value={draft.objective}
-                    onChange={(event) =>
-                      setDraft({ ...draft, objective: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Tom
-                  <input
-                    value={draft.tone}
-                    onChange={(event) =>
-                      setDraft({ ...draft, tone: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Estilo
-                  <input
-                    value={draft.style}
-                    onChange={(event) =>
-                      setDraft({ ...draft, style: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Formalidade
-                  <select
-                    value={draft.formality}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        formality: event.target.value as ReportFormality,
-                      })
-                    }
-                  >
-                    <option value="low">Baixa</option>
-                    <option value="medium">Média</option>
-                    <option value="high">Alta</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="sections-editor">
-                <div className="section-heading">
-                  <h3>Seções</h3>
-                  <button
-                    className="text-button"
-                    type="button"
-                    onClick={() =>
-                      setDraft({
-                        ...draft,
-                        sections: [
-                          ...draft.sections,
-                          emptySection(draft.sections.length + 1),
-                        ],
-                      })
-                    }
-                  >
-                    Adicionar seção
-                  </button>
-                </div>
-                {draft.sections.map((section, index) => (
-                  <div className="section-editor" key={section.id}>
-                    <label>
-                      Nome
-                      <input
-                        value={section.name}
-                        onChange={(event) =>
-                          updateSection(index, { name: event.target.value })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Descrição
-                      <input
-                        value={section.description}
-                        onChange={(event) =>
-                          updateSection(index, {
-                            description: event.target.value,
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Ordem
-                      <input
-                        type="number"
-                        value={section.order}
-                        onChange={(event) =>
-                          updateSection(index, {
-                            order: Number(event.target.value),
-                          })
-                        }
-                      />
-                    </label>
-                    <label className="checkbox-field">
-                      <input
-                        type="checkbox"
-                        checked={section.required}
-                        onChange={(event) =>
-                          updateSection(index, {
-                            required: event.target.checked,
-                          })
-                        }
-                      />
-                      Obrigatória
-                    </label>
-                    <button
-                      className="danger-text-button"
-                      type="button"
-                      onClick={() =>
-                        setDraft({
-                          ...draft,
-                          sections: draft.sections.filter(
-                            (_, sectionIndex) => sectionIndex !== index,
-                          ),
-                        })
-                      }
-                    >
-                      Remover
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="sections-editor">
-                <div className="section-heading">
-                  <h3>Campos variáveis</h3>
-                  <button
-                    className="text-button"
-                    type="button"
-                    onClick={() =>
-                      setDraft({
-                        ...draft,
-                        fields: [...draft.fields, emptyField()],
-                      })
-                    }
-                  >
-                    Adicionar campo
-                  </button>
-                </div>
-                {draft.fields.length === 0 && (
-                  <p className="empty-hint">
-                    Nenhum campo variável identificado.
-                  </p>
-                )}
-                {draft.fields.map((field, index) => (
-                  <div className="section-editor field-editor" key={field.id}>
-                    <label>
-                      Nome
-                      <input
-                        value={field.name}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            fields: draft.fields.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? { ...item, name: event.target.value }
-                                : item,
-                            ),
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Rótulo
-                      <input
-                        value={field.label}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            fields: draft.fields.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? { ...item, label: event.target.value }
-                                : item,
-                            ),
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Tipo
-                      <select
-                        value={field.type}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            fields: draft.fields.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? {
-                                    ...item,
-                                    type: event.target.value as ReportFieldType,
-                                  }
-                                : item,
-                            ),
-                          })
-                        }
-                      >
-                        <option value="text">Texto</option>
-                        <option value="date">Data</option>
-                        <option value="number">Número</option>
-                        <option value="boolean">Sim/Não</option>
-                      </select>
-                    </label>
-                    <label className="checkbox-field">
-                      <input
-                        type="checkbox"
-                        checked={field.required}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            fields: draft.fields.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? { ...item, required: event.target.checked }
-                                : item,
-                            ),
-                          })
-                        }
-                      />
-                      Obrigatório
-                    </label>
-                    <button
-                      className="danger-text-button"
-                      type="button"
-                      onClick={() =>
-                        setDraft({
-                          ...draft,
-                          fields: draft.fields.filter(
-                            (_, itemIndex) => itemIndex !== index,
-                          ),
-                        })
-                      }
-                    >
-                      Remover
-                    </button>
-                    <label className="full-field">
-                      Descrição
-                      <input
-                        value={field.description}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            fields: draft.fields.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? { ...item, description: event.target.value }
-                                : item,
-                            ),
-                          })
-                        }
-                      />
-                    </label>
-                  </div>
-                ))}
-              </div>
-
-              <div className="form-grid rules-editor">
-                <label className="full-field">
-                  Regras de escrita <span>uma por linha</span>
-                  <textarea
-                    rows={4}
-                    value={draft.writingRules.join('\n')}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        writingRules: event.target.value
-                          .split('\n')
-                          .map((item) => item.trim())
-                          .filter(Boolean),
-                      })
-                    }
-                  />
-                </label>
-                <label>
-                  Vocabulário recomendado <span>um por linha</span>
-                  <textarea
-                    rows={4}
-                    value={draft.recommendedVocabulary.join('\n')}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        recommendedVocabulary: event.target.value
-                          .split('\n')
-                          .map((item) => item.trim())
-                          .filter(Boolean),
-                      })
-                    }
-                  />
-                </label>
-                <label>
-                  Expressões proibidas <span>uma por linha</span>
-                  <textarea
-                    rows={4}
-                    value={draft.forbiddenExpressions.join('\n')}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        forbiddenExpressions: event.target.value
-                          .split('\n')
-                          .map((item) => item.trim())
-                          .filter(Boolean),
-                      })
-                    }
-                  />
-                </label>
-              </div>
-              <div className="form-actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => setDraft(null)}
-                >
-                  Cancelar
-                </button>
-                <button type="submit" disabled={isSaving}>
-                  {isSaving
-                    ? 'Salvando...'
-                    : importedFileName
-                      ? 'Confirmar modelo'
-                      : 'Salvar modelo'}
-                </button>
-              </div>
-            </form>
-          ) : selected ? (
-            <article className="template-details">
-              <span className="badge">Formalidade {selected.formality}</span>
-              <h3>{selected.name}</h3>
-              <p>{selected.description}</p>
-              <dl>
+              <dl className={styles.quickFacts}>
                 <div>
-                  <dt>Objetivo</dt>
-                  <dd>{selected.objective}</dd>
+                  <dt>Seções</dt>
+                  <dd>{draft.structurePattern.sections.length}</dd>
                 </div>
                 <div>
-                  <dt>Tom e estilo</dt>
+                  <dt>Campos</dt>
+                  <dd>{draft.fields.length}</dd>
+                </div>
+                <div>
+                  <dt>Estilo</dt>
+                  <dd>{draft.writingPattern.globalStyle.formality}</dd>
+                </div>
+                <div>
+                  <dt>Atualizado</dt>
                   <dd>
-                    {selected.tone} · {selected.style}
+                    {new Date(draft.metadata.updatedAt).toLocaleDateString(
+                      'pt-BR',
+                    )}
                   </dd>
                 </div>
               </dl>
-              <h4>Estrutura</h4>
-              <ol>
-                {[...selected.sections]
-                  .sort((a, b) => a.order - b.order)
-                  .map((section) => (
-                    <li key={section.id}>
-                      <strong>{section.name}</strong>
-                      <span>
-                        {section.required ? 'Obrigatória' : 'Opcional'} · ordem{' '}
-                        {section.order}
-                      </span>
-                      <p>{section.description}</p>
-                    </li>
-                  ))}
-              </ol>
-              <h4>Regras de escrita</h4>
-              {selected.writingRules.length ? (
-                <ul>
-                  {selected.writingRules.map((rule) => (
-                    <li key={rule}>{rule}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p>Não informado</p>
-              )}
-              <h4>Campos variáveis</h4>
-              {selected.fields.length ? (
-                <ul>
-                  {selected.fields.map((field) => (
-                    <li key={field.id}>
-                      <strong>{field.label || field.name}</strong> ·{' '}
-                      {field.type} ·{' '}
-                      {field.required ? 'obrigatório' : 'opcional'}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>Não informado</p>
-              )}
-              <div className="detail-actions">
+              <div className={styles.primaryActions}>
+                {draft.metadata.status === 'draft' && (
+                  <button
+                    type="button"
+                    onClick={() => void confirmTemplate()}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? 'Salvando...' : 'Confirmar e usar'}
+                  </button>
+                )}
                 <button
                   className="secondary-button"
                   type="button"
-                  onClick={() => startEdit(selected)}
+                  onClick={() => setShowEditor((value) => !value)}
+                  disabled={isSaving}
                 >
-                  Editar
+                  {showEditor ? 'Fechar edição' : 'Editar informações'}
                 </button>
-                <button
-                  className="danger-button"
-                  type="button"
-                  onClick={() => void remove(selected.id)}
-                >
-                  Excluir
-                </button>
+                <details className={styles.moreActions}>
+                  <summary>Mais ações</summary>
+                  <button
+                    className="danger-button"
+                    type="button"
+                    onClick={() => void removeTemplate()}
+                    disabled={isSaving}
+                  >
+                    Excluir modelo
+                  </button>
+                </details>
               </div>
+              {showEditor && (
+                <div className={`form-grid ${styles.editor}`}>
+                  <label>
+                    Nome
+                    <input
+                      value={draft.metadata.name}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          metadata: {
+                            ...draft.metadata,
+                            name: event.target.value,
+                          },
+                        })
+                      }
+                      disabled={isSaving}
+                    />
+                  </label>
+                  <label>
+                    Tipo documental
+                    <input value={draft.metadata.documentType} disabled />
+                  </label>
+                  <label className="full-field">
+                    Descrição
+                    <textarea
+                      value={draft.metadata.description}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          metadata: {
+                            ...draft.metadata,
+                            description: event.target.value,
+                          },
+                        })
+                      }
+                      disabled={isSaving}
+                    />
+                  </label>
+                  <button
+                    className={styles.saveButton}
+                    type="button"
+                    onClick={() => void save()}
+                    disabled={
+                      isSaving ||
+                      !draft.metadata.name.trim() ||
+                      !draft.metadata.description.trim()
+                    }
+                  >
+                    {isSaving ? 'Salvando...' : 'Salvar nome e descrição'}
+                  </button>
+                </div>
+              )}
+
+              <details
+                className={styles.technicalDetails}
+                open={showTechnicalDetails}
+                onToggle={(event) =>
+                  setShowTechnicalDetails(event.currentTarget.open)
+                }
+              >
+                <summary>Ver análise técnica e evidências</summary>
+                <TemplateReview template={draft} />
+              </details>
             </article>
           ) : (
-            <p>Selecione ou crie um modelo.</p>
+            <p>Importe ou selecione um modelo.</p>
           )}
         </div>
       </div>

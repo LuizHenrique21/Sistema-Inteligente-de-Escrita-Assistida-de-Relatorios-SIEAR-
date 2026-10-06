@@ -1,8 +1,14 @@
-import type { ReportTemplate } from '../../../src/types/report-template'
 import type { ReportTemplateRepository } from '../../repositories/templates/report-template.repository'
+import {
+  REPORT_TEMPLATE_VERSION,
+  type ReportTemplate,
+} from '../../../src/domain/templates/report-template'
+import { getLogger } from '../../infrastructure/logging/logger.runtime'
+
+const logger = getLogger('ReportTemplateService')
 
 export type ReportTemplateServiceErrorCode =
-  'VALIDATION_ERROR' | 'NOT_FOUND' | 'DUPLICATE_ID'
+  'NOT_FOUND' | 'INVALID_STATE' | 'INVALID_VERSION'
 
 export class ReportTemplateServiceError extends Error {
   constructor(
@@ -14,205 +20,101 @@ export class ReportTemplateServiceError extends Error {
   }
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+export type ReportTemplateClock = () => string
+
+function cloneTemplate(template: ReportTemplate): ReportTemplate {
+  return structuredClone(template)
 }
 
-export function isReportTemplate(value: unknown): value is ReportTemplate {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false
-  }
-
-  const template = value as Record<string, unknown>
-  if (!Array.isArray(template.sections)) return false
-  if (!Array.isArray(template.fields)) return false
-
-  const validSections = template.sections.every((value: unknown) => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      return false
-    }
-    const section = value as Record<string, unknown>
-    return (
-      typeof section.id === 'string' &&
-      typeof section.name === 'string' &&
-      typeof section.description === 'string' &&
-      typeof section.required === 'boolean' &&
-      typeof section.order === 'number' &&
-      Number.isInteger(section.order)
-    )
-  })
-
-  const validFields = template.fields.every((value: unknown) => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      return false
-    }
-    const field = value as Record<string, unknown>
-    return (
-      typeof field.id === 'string' &&
-      typeof field.name === 'string' &&
-      typeof field.label === 'string' &&
-      (field.type === 'text' ||
-        field.type === 'date' ||
-        field.type === 'number' ||
-        field.type === 'boolean') &&
-      typeof field.required === 'boolean' &&
-      typeof field.description === 'string'
-    )
-  })
-
-  return (
-    typeof template.id === 'string' &&
-    typeof template.name === 'string' &&
-    typeof template.description === 'string' &&
-    typeof template.objective === 'string' &&
-    typeof template.tone === 'string' &&
-    typeof template.style === 'string' &&
-    (template.formality === 'low' ||
-      template.formality === 'medium' ||
-      template.formality === 'high') &&
-    validSections &&
-    validFields &&
-    isStringArray(template.writingRules) &&
-    isStringArray(template.recommendedVocabulary) &&
-    isStringArray(template.forbiddenExpressions)
-  )
-}
-
-function requireText(value: string, field: string): void {
-  if (value.trim() === '') {
+function requireCurrentVersion(template: ReportTemplate): void {
+  if (template.version !== REPORT_TEMPLATE_VERSION) {
     throw new ReportTemplateServiceError(
-      'VALIDATION_ERROR',
-      `${field} é obrigatório.`,
+      'INVALID_VERSION',
+      `O modelo deve estar na versão ${REPORT_TEMPLATE_VERSION}.`,
     )
-  }
-}
-
-function validateTemplate(template: ReportTemplate): void {
-  requireText(template.id, 'ID do modelo')
-  requireText(template.name, 'Nome')
-  requireText(template.description, 'Descrição')
-  requireText(template.objective, 'Objetivo')
-
-  if (template.sections.length === 0) {
-    throw new ReportTemplateServiceError(
-      'VALIDATION_ERROR',
-      'O modelo deve possuir pelo menos uma seção.',
-    )
-  }
-
-  const sectionIds = new Set<string>()
-  const sectionOrders = new Set<number>()
-  for (const section of template.sections) {
-    requireText(section.id, 'ID da seção')
-    requireText(section.name, 'Nome da seção')
-
-    if (sectionIds.has(section.id)) {
-      throw new ReportTemplateServiceError(
-        'DUPLICATE_ID',
-        `O ID de seção "${section.id}" está duplicado.`,
-      )
-    }
-    if (sectionOrders.has(section.order)) {
-      throw new ReportTemplateServiceError(
-        'VALIDATION_ERROR',
-        `A ordem ${section.order} está duplicada.`,
-      )
-    }
-    sectionIds.add(section.id)
-    sectionOrders.add(section.order)
-  }
-
-  const fieldIds = new Set<string>()
-  for (const field of template.fields) {
-    requireText(field.id, 'ID do campo')
-    requireText(field.name, 'Nome do campo')
-    if (fieldIds.has(field.id)) {
-      throw new ReportTemplateServiceError(
-        'DUPLICATE_ID',
-        `O ID de campo "${field.id}" está duplicado.`,
-      )
-    }
-    fieldIds.add(field.id)
-  }
-}
-
-function normalizeTemplate(template: ReportTemplate): ReportTemplate {
-  return {
-    ...structuredClone(template),
-    id: template.id.trim(),
-    name: template.name.trim(),
-    description: template.description.trim(),
-    objective: template.objective.trim(),
-    tone: template.tone.trim(),
-    style: template.style.trim(),
-    sections: template.sections
-      .map((section) => ({
-        ...section,
-        id: section.id.trim(),
-        name: section.name.trim(),
-        description: section.description.trim(),
-      }))
-      .sort((first, second) => first.order - second.order),
-    fields: template.fields.map((field) => ({
-      ...field,
-      id: field.id.trim(),
-      name: field.name.trim(),
-      label: field.label.trim(),
-      description: field.description.trim(),
-    })),
   }
 }
 
 export class ReportTemplateService {
-  constructor(private readonly repository: ReportTemplateRepository) {}
-
-  getAll(): Promise<ReportTemplate[]> {
-    return this.repository.findAll()
-  }
-
-  getById(id: string): Promise<ReportTemplate | null> {
-    return this.repository.findById(id)
-  }
+  constructor(
+    private readonly repository: ReportTemplateRepository,
+    private readonly now: ReportTemplateClock = () => new Date().toISOString(),
+  ) {}
 
   async create(template: ReportTemplate): Promise<ReportTemplate> {
-    const normalized = normalizeTemplate(template)
-    validateTemplate(normalized)
-    if (await this.repository.findById(normalized.id)) {
-      throw new ReportTemplateServiceError(
-        'DUPLICATE_ID',
-        `Já existe um modelo com o ID "${normalized.id}".`,
-      )
-    }
-    return this.repository.create(normalized)
+    logger.info('Template create started', { templateId: template.metadata.id })
+    requireCurrentVersion(template)
+    const timestamp = this.now()
+    const candidate = cloneTemplate(template)
+    candidate.metadata.status = 'draft'
+    candidate.metadata.createdAt = timestamp
+    candidate.metadata.updatedAt = timestamp
+    const created = cloneTemplate(await this.repository.create(candidate))
+    logger.info('Template created', { templateId: created.metadata.id })
+    return created
   }
 
-  async update(id: string, template: ReportTemplate): Promise<ReportTemplate> {
-    if (id !== template.id) {
-      throw new ReportTemplateServiceError(
-        'VALIDATION_ERROR',
-        'O ID do modelo não pode ser alterado.',
-      )
-    }
-    const normalized = normalizeTemplate(template)
-    validateTemplate(normalized)
-    const updated = await this.repository.update(id, normalized)
-    if (!updated) {
+  async getById(id: string): Promise<ReportTemplate | null> {
+    logger.debug('Template getById', { templateId: id })
+    const template = await this.repository.getById(id)
+    return template ? cloneTemplate(template) : null
+  }
+
+  async getAll(): Promise<ReportTemplate[]> {
+    logger.debug('Template getAll')
+    return (await this.repository.getAll()).map(cloneTemplate)
+  }
+
+  async update(template: ReportTemplate): Promise<ReportTemplate> {
+    logger.info('Template update started', { templateId: template.metadata.id })
+    requireCurrentVersion(template)
+    const existing = await this.repository.getById(template.metadata.id)
+    if (!existing) {
       throw new ReportTemplateServiceError(
         'NOT_FOUND',
-        'Modelo de relatório não encontrado.',
+        'Modelo não encontrado.',
       )
     }
+    requireCurrentVersion(existing)
+    const candidate = cloneTemplate(template)
+    candidate.metadata.status = existing.metadata.status
+    candidate.metadata.createdAt = existing.metadata.createdAt
+    candidate.metadata.updatedAt = this.now()
+    const updated = cloneTemplate(await this.repository.update(candidate))
+    logger.info('Template updated', { templateId: updated.metadata.id })
     return updated
   }
 
-  async delete(id: string): Promise<boolean> {
-    const deleted = await this.repository.delete(id)
-    if (!deleted) {
+  delete(id: string): Promise<void> {
+    logger.info('Template delete started', { templateId: id })
+    return this.repository.delete(id)
+  }
+
+  async confirm(id: string): Promise<ReportTemplate> {
+    logger.info('Template confirmation started', { templateId: id })
+    const existing = await this.repository.getById(id)
+    if (!existing) {
       throw new ReportTemplateServiceError(
         'NOT_FOUND',
-        'Modelo de relatório não encontrado.',
+        'Modelo não encontrado.',
       )
     }
-    return true
+    requireCurrentVersion(existing)
+    if (existing.metadata.status !== 'draft') {
+      logger.warn('Template confirmation rejected', {
+        templateId: id,
+        status: existing.metadata.status,
+      })
+      throw new ReportTemplateServiceError(
+        'INVALID_STATE',
+        'Somente um modelo em revisão pode ser confirmado.',
+      )
+    }
+    const confirmed = cloneTemplate(existing)
+    confirmed.metadata.status = 'confirmed'
+    confirmed.metadata.updatedAt = this.now()
+    const result = cloneTemplate(await this.repository.update(confirmed))
+    logger.info('Template confirmed', { templateId: id })
+    return result
   }
 }

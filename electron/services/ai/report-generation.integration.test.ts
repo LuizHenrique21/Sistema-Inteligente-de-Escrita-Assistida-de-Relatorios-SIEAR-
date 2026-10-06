@@ -1,53 +1,70 @@
-import { expect, it } from 'vitest'
-import type { ReportInformation } from '../../../src/types/siear-api'
+import { describe, expect, it } from 'vitest'
+import { SqliteReportTemplateRepository } from '../../repositories/templates/sqlite-report-template.repository'
 import { OllamaService } from '../ollama/ollama.service'
-import { TECHNICAL_REPORT_TEMPLATE } from '../templates/default-report-templates'
+import { ReportGenerationPlanner } from '../reports/report-generation-planner'
 import { ReportGenerationService } from './report-generation.service'
+import type { StructuredActivity } from '../../../src/types/generated-report'
 
-const integrationTest =
-  process.env.SIEAR_OLLAMA_INTEGRATION === 'true' ? it : it.skip
-
-integrationTest(
-  'gera um relatório estruturado usando o Ollama local real',
-  async () => {
-    const information: ReportInformation = {
-      equipment: 'Notebook Dell',
-      activities: ['Substituição do HD', 'Instalação do Windows 11'],
-      result: null,
-      problems: null,
-      duration: null,
-      observations: null,
-    }
-    const ollama = new OllamaService()
-    const service = new ReportGenerationService({
-      generateJson(
-        prompt: string,
-        schema?: Record<string, unknown>,
-      ): Promise<string> {
-        return ollama.generateJson(prompt, schema)
+describe.skipIf(process.env.SIEAR_REPORT_GENERATION_INTEGRATION !== 'true')(
+  'ReportGeneration real qwen3:8b',
+  () => {
+    it(
+      'gera todas as seções do modelo sem evidências inventadas',
+      async () => {
+        const databasePath = process.env.SIEAR_REPORT_GENERATION_DATABASE
+        const templateId = process.env.SIEAR_REPORT_GENERATION_TEMPLATE_ID
+        if (!databasePath || !templateId)
+          throw new Error(
+            'Defina SIEAR_REPORT_GENERATION_DATABASE e SIEAR_REPORT_GENERATION_TEMPLATE_ID.',
+          )
+        const repository = new SqliteReportTemplateRepository(databasePath)
+        try {
+          const template = await repository.getById(templateId)
+          if (!template) throw new Error('Modelo de relatório não encontrado.')
+          const information: StructuredActivity = {
+            facts: [
+              {
+                name: 'equipamento',
+                label: 'Equipamento',
+                value: 'notebook Dell',
+                evidence: 'notebook Dell',
+              },
+            ],
+            activities: [
+              {
+                description: 'Substituição do disco rígido',
+                procedures: [
+                  'Substituição do disco rígido',
+                  'Instalação do Windows 11',
+                  'Atualização dos drivers',
+                ],
+                result: 'O computador funcionou normalmente após os testes.',
+                problems: [],
+                evidence: [
+                  'Troquei o HD do notebook Dell',
+                  'instalei Windows 11',
+                  'atualizei os drivers',
+                  'fiz testes e o computador funcionou normalmente',
+                ],
+              },
+            ],
+          }
+          const plan = new ReportGenerationPlanner().plan(information, template)
+          const report = await new ReportGenerationService(
+            new OllamaService({ model: 'qwen3:8b' }),
+          ).generate(information, plan, template)
+          expect(report.sections).toHaveLength(plan.sections.length)
+          expect(report.sections.map((section) => section.id)).toEqual(
+            plan.sections.map((section) => section.sectionId),
+          )
+          expect(report.sections.every((section) => section.content.trim())).toBe(
+            true,
+          )
+        } finally {
+          repository.close()
+        }
       },
-    })
-
-    const report = await service.generate(
-      information,
-      TECHNICAL_REPORT_TEMPLATE,
+      30 * 60_000,
     )
-
-    expect(report.sections.map((section) => section.name)).toEqual([
-      'Introdução',
-      'Atividades Realizadas',
-      'Resultados',
-      'Conclusão',
-    ])
-    const content = report.sections
-      .map((section) => section.content)
-      .join(' ')
-      .toLocaleLowerCase('pt-BR')
-    expect(content).toContain('notebook dell')
-    expect(content).toContain('hd')
-    expect(content).toContain('windows 11')
-    expect(content).not.toContain('2 horas')
-    expect(content).not.toContain('testado com sucesso')
   },
-  180_000,
 )

@@ -1,174 +1,152 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ReportTemplate } from '../../../src/types/report-template'
-import type { ReportInformation } from '../../../src/types/siear-api'
-import { TECHNICAL_REPORT_TEMPLATE } from '../templates/default-report-templates'
-import { ReportPromptBuilder } from './prompts/report-generation.prompt'
-import {
-  ReportGenerationService,
-  ReportGenerationServiceError,
-} from './report-generation.service'
+import type { StructuredActivity } from '../../../src/types/generated-report'
+import { ReportGenerationPlanner } from '../reports/report-generation-planner'
+import { createRichReportTemplate } from '../../testing/report-template.fixture'
+import { ReportGenerationService } from './report-generation.service'
 
-const information: ReportInformation = {
-  equipment: 'Notebook Dell',
-  activities: ['Substituição do HD', 'Instalação do Windows 11'],
-  result: null,
-  problems: null,
-  duration: null,
-  observations: null,
+const template = createRichReportTemplate('template')
+template.structurePattern.hierarchy = [template.structurePattern.sections[0]!]
+template.fields = []
+const information: StructuredActivity = {
+  facts: [
+    {
+      name: 'equipamento',
+      label: 'Equipamento',
+      value: 'notebook',
+      evidence: 'notebook',
+    },
+  ],
+  activities: [
+    {
+      description: 'Substituição do HD',
+      procedures: ['Substituição do HD'],
+      result: null,
+      problems: [],
+      evidence: ['Troquei o HD'],
+    },
+  ],
 }
+const plan = new ReportGenerationPlanner().plan(information, template)
+const section = plan.sections[0]!
 
-function response(sections: Array<{ name: string; content: string }>): string {
-  return JSON.stringify({ sections })
-}
-
-function generator(output: string) {
-  return { generateJson: vi.fn().mockResolvedValue(output) }
-}
-
-const validSections = [
-  { name: 'Introdução', content: 'Atividade realizada em Notebook Dell.' },
-  {
-    name: 'Atividades Realizadas',
-    content: 'Foram realizados a substituição do HD e o Windows 11.',
-  },
-  { name: 'Resultados', content: 'Não foram fornecidos dados de resultado.' },
-  { name: 'Conclusão', content: 'As atividades informadas foram registradas.' },
-]
-
-describe('ReportPromptBuilder', () => {
-  it('separa como escrever dos fatos e inclui todas as regras', () => {
-    const prompt = new ReportPromptBuilder().build(
-      information,
-      TECHNICAL_REPORT_TEMPLATE,
-    )
-    expect(prompt).toContain('O modelo define COMO escrever')
-    expect(prompt).toContain('Não invente resultados')
-    expect(prompt).toContain('Substituição do HD')
-    expect(prompt).toContain('Utilizar linguagem formal.')
-    expect(prompt).toContain('1. Introdução (obrigatória)')
-    expect(prompt).toContain('Responda exclusivamente com JSON válido')
+function response(
+  content: string,
+  usedEvidenceIds = ['evidence-002'],
+): string {
+  return JSON.stringify({
+    sectionId: section.sectionId,
+    name: section.sectionName,
+    content,
+    usedEvidenceIds,
   })
-})
+}
 
 describe('ReportGenerationService', () => {
-  it('gera todas as seções obrigatórias sem criar resultado ausente', async () => {
-    const service = new ReportGenerationService(
-      generator(response(validSections)),
-    )
-    const report = await service.generate(
-      information,
-      TECHNICAL_REPORT_TEMPLATE,
-    )
-
-    expect(report.templateId).toBe('technical-report')
-    expect(report.sections.map((section) => section.name)).toEqual(
-      TECHNICAL_REPORT_TEMPLATE.sections.map((section) => section.name),
-    )
-    expect(report.sections[2]?.content).toContain('Não foram fornecidos')
-    expect(report.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
-  })
-
-  it('mantém fatos de resultado, duração e testes fornecidos', async () => {
-    const completeInformation: ReportInformation = {
-      ...information,
-      activities: [...information.activities, 'Testes de funcionamento'],
-      result: 'Equipamento funcionando normalmente',
-      duration: '2 horas',
-    }
-    const output = validSections.map((section) => ({
-      ...section,
-      content: `${section.content} Equipamento funcionando normalmente em 2 horas.`,
-    }))
-    const service = new ReportGenerationService(generator(response(output)))
-
-    const report = await service.generate(
-      completeInformation,
-      TECHNICAL_REPORT_TEMPLATE,
-    )
-    expect(
-      report.sections.some((section) => section.content.includes('2 horas')),
-    ).toBe(true)
-  })
-
-  it('aceita seção obrigatória de problemas com formulação neutra', async () => {
-    const template: ReportTemplate = {
-      ...TECHNICAL_REPORT_TEMPLATE,
-      sections: [
-        ...TECHNICAL_REPORT_TEMPLATE.sections.slice(0, 2),
-        {
-          id: 'problems',
-          name: 'Problemas Encontrados',
-          description: 'Problemas informados.',
-          required: true,
-          order: 3,
-        },
-        ...TECHNICAL_REPORT_TEMPLATE.sections.slice(2).map((section) => ({
-          ...section,
-          order: section.order + 1,
-        })),
-      ],
-    }
-    const sections = [
-      ...validSections.slice(0, 2),
-      {
-        name: 'Problemas Encontrados',
-        content: 'Não foram informados problemas.',
-      },
-      ...validSections.slice(2),
-    ]
-    const service = new ReportGenerationService(generator(response(sections)))
-    const report = await service.generate(information, template)
-    expect(report.sections[2]?.content).toBe('Não foram informados problemas.')
-  })
-
-  it('rejeita resposta que não seja JSON', async () => {
-    const service = new ReportGenerationService(generator('texto livre'))
-    await expect(
-      service.generate(information, TECHNICAL_REPORT_TEMPLATE),
-    ).rejects.toMatchObject({
-      code: 'INVALID_MODEL_RESPONSE',
-    } satisfies Partial<ReportGenerationServiceError>)
-  })
-
-  it('rejeita seção inexistente no template', async () => {
-    const service = new ReportGenerationService(
-      generator(
-        response([
-          ...validSections,
-          { name: 'Seção Inventada', content: 'Conteúdo.' },
-        ]),
-      ),
-    )
-    await expect(
-      service.generate(information, TECHNICAL_REPORT_TEMPLATE),
-    ).rejects.toThrow('não existe no modelo')
-  })
-
-  it('rejeita seção obrigatória ausente', async () => {
-    const service = new ReportGenerationService(
-      generator(
-        response(
-          validSections.filter((section) => section.name !== 'Resultados'),
+  it('gera uma seção isolada com IDs de evidência permitidos', async () => {
+    const generator = {
+      generateJson: vi
+        .fn()
+        .mockResolvedValue(
+          response('Foi realizada a substituição do HD no notebook.', [
+            'evidence-002',
+            'evidence-001',
+          ]),
         ),
-      ),
+    }
+    const report = await new ReportGenerationService(generator).generate(
+      information,
+      plan,
+      template,
     )
-    await expect(
-      service.generate(information, TECHNICAL_REPORT_TEMPLATE),
-    ).rejects.toThrow('omitiu uma seção obrigatória')
+    expect(report.sections[0]).toMatchObject({
+      id: section.sectionId,
+      name: 'Execução',
+      order: 2,
+      content: 'Foi realizada a substituição do HD no notebook.',
+    })
+    const prompt = generator.generateJson.mock.calls[0]?.[0] as string
+    expect(prompt).toContain('Os fatos vêm exclusivamente de FACTS e ACTIVITIES')
+    expect(prompt).toContain('evidence-002')
+    expect(prompt).not.toContain('predominantFont')
   })
 
-  it('rejeita seções fora da ordem do template', async () => {
-    const service = new ReportGenerationService(
-      generator(
-        response([
-          validSections[1]!,
-          validSections[0]!,
-          ...validSections.slice(2),
-        ]),
-      ),
-    )
+  it('rejeita IDs de evidência não permitidos', async () => {
     await expect(
-      service.generate(information, TECHNICAL_REPORT_TEMPLATE),
-    ).rejects.toThrow('fora da ordem')
+      new ReportGenerationService({
+        generateJson: vi
+          .fn()
+          .mockResolvedValue(response('Procedimento realizado.', ['inventada'])),
+      }).generate(information, plan, template),
+    ).rejects.toMatchObject({ code: 'INVALID_MODEL_RESPONSE' })
+  })
+
+  it('corrige localmente uma seção inválida sem repetir as demais', async () => {
+    const generator = {
+      generateJson: vi
+        .fn()
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            sectionId: 'inventada',
+            name: 'Inventada',
+            content: 'Texto.',
+            usedEvidenceIds: ['evidence-002'],
+          }),
+        )
+        .mockResolvedValueOnce(response('Foi realizada a substituição do HD.')),
+    }
+    const report = await new ReportGenerationService(generator).generate(
+      information,
+      plan,
+      template,
+    )
+    expect(report.sections).toHaveLength(1)
+    expect(generator.generateJson).toHaveBeenCalledTimes(2)
+    expect(generator.generateJson.mock.calls[1]?.[0]).toContain(
+      'Corrija somente o JSON anterior',
+    )
+  })
+
+  it('corrige um número sem evidência antes de falhar a geração', async () => {
+    const generator = {
+      generateJson: vi
+        .fn()
+        .mockResolvedValueOnce(response('Foram realizados 3 testes.'))
+        .mockResolvedValueOnce(response('Foi realizada a substituição do HD.')),
+    }
+
+    await expect(
+      new ReportGenerationService(generator).generate(information, plan, template),
+    ).resolves.toMatchObject({ sections: [expect.any(Object)] })
+    expect(generator.generateJson).toHaveBeenCalledTimes(2)
+    expect(generator.generateJson.mock.calls[1]?.[0]).toContain(
+      'Remova qualquer número',
+    )
+  })
+
+  it('aceita marcadores numéricos de lista como formatação', async () => {
+    const report = await new ReportGenerationService({
+      generateJson: vi.fn().mockResolvedValue(
+        response('1. Foi realizada a substituição do HD.'),
+      ),
+    }).generate(information, plan, template)
+
+    expect(report.sections).toHaveLength(1)
+  })
+
+  it('usa evidências literais após uma correção numérica sem sucesso', async () => {
+    const generator = {
+      generateJson: vi
+        .fn()
+        .mockResolvedValue(response('Foram realizados 3 testes.')),
+    }
+
+    const report = await new ReportGenerationService(generator).generate(
+      information,
+      plan,
+      template,
+    )
+
+    expect(generator.generateJson).toHaveBeenCalledTimes(2)
+    expect(report.sections[0]?.content).toContain('Troquei o HD')
   })
 })

@@ -2,7 +2,7 @@
 
 Sistema Inteligente de Escrita Assistida de Relatórios.
 
-Fundação técnica em Electron, React, TypeScript e Vite, com integração local ao Ollama. SQLite e processamento de documentos ainda não foram implementados.
+Aplicação Electron, React, TypeScript e Vite com integração local ao Ollama, aprendizado de modelos a partir de um único DOCX, persistência SQLite, geração estruturada e exportação DOCX.
 
 ## Uso
 
@@ -27,6 +27,9 @@ npm run dev
 - `electron/ipc/`: handlers IPC por domínio.
 - `electron/services/ollama/`: comunicação exclusiva do Main Process com o Ollama.
 - `electron/services/ai/`: prompts, interpretação e validação de dados estruturados do SIEAR.
+- `electron/services/documents/`: extração, análise e renderização de documentos.
+- `electron/repositories/templates/`: persistência dos modelos oficiais em SQLite e implementação em memória para testes.
+- `src/domain/templates/`: contrato rico e independente de infraestrutura do `ReportTemplate`.
 - `src/types/siear-api.ts`: contrato compartilhado e tipado.
 
 ## Ollama
@@ -43,6 +46,8 @@ Fluxo da integração:
 `React → window.siear.ai.generate() → preload → ai:generate → OllamaService → http://localhost:11434/api/chat`
 
 O Renderer não acessa o endpoint diretamente. URL, modelo e timeout ficam centralizados no serviço do Main Process. Outros serviços futuros devem seguir o mesmo limite arquitetural e ser expostos somente por métodos tipados no preload.
+
+O timeout padrão do Ollama é de 300 segundos para comportar análises estruturadas de documentos em modelos locais. Ele pode ser ajustado antes da inicialização com `SIEAR_OLLAMA_TIMEOUT_MS`, usando um valor em milissegundos.
 
 ## Extração estruturada
 
@@ -61,20 +66,75 @@ npm exec vitest run electron/services/ai/report-extraction.integration.test.ts
 
 ## Modelos de relatório
 
-Os modelos são gerenciados no Main Process por `ReportTemplateService`, apoiado pela abstração `ReportTemplateRepository`. A implementação atual, `InMemoryReportTemplateRepository`, mantém os dados somente durante a execução e poderá ser substituída futuramente por SQLite sem alterar o contrato do Renderer.
+Os modelos são gerenciados no Main Process por `ReportTemplateService`, apoiado pela abstração `ReportTemplateRepository`. Em produção, `SqliteReportTemplateRepository` persiste integralmente os padrões estruturais, de escrita, semânticos e de formatação. `InMemoryReportTemplateRepository` é reservado aos testes unitários.
 
 Fluxo:
 
-`React → window.siear.templates → preload → templates:* → ReportTemplateService → InMemoryReportTemplateRepository`
+`DOCX → DocumentExtractor → análises estrutural/escrita/semântica/formatação → ReportTemplateBuilder → ReportTemplateService → SQLite`
 
-O modelo inicial “Relatório Técnico” define quatro seções obrigatórias e regras básicas de escrita. A interface permite visualizar, criar, editar, excluir e selecionar modelos; a seleção ainda não gera relatórios.
+A interface permite importar um único DOCX, acompanhar a análise, revisar, editar, confirmar, excluir e selecionar o modelo aprendido.
 
 ## Geração de relatório
 
-A tela “Novo Relatório” executa duas etapas: primeiro transforma a descrição em `ReportInformation`; depois combina essas informações com o modelo selecionado para produzir um `GeneratedReport`.
+A tela “Novo Relatório” interpreta a descrição como `StructuredActivity`, cria um plano determinístico a partir do modelo selecionado e solicita ao Ollama somente o preenchimento fundamentado das seções.
 
 Fluxo:
 
-`ReportInformation + templateId → IPC → ReportTemplateRepository → ReportPromptBuilder → ReportGenerationService → Ollama → GeneratedReport`
+`Texto → UserInformationExtractor → StructuredActivity → ReportGenerationPlanner + ReportTemplate → ReportGenerationService → Ollama → GeneratedReport`
 
-O template é buscado no Main Process pelo ID e nunca é aceito do Renderer como fonte confiável. A resposta do Ollama usa JSON Schema e ainda passa por validação de seções obrigatórias, nomes, conteúdo e ordem antes de chegar à interface.
+O template é buscado no Main Process pelo ID e nunca é aceito do Renderer como fonte confiável. O plano preserva hierarquia, regras de escrita, semântica e formatação. A resposta do Ollama usa JSON Schema, exige evidências fornecidas pelo usuário e é validada antes de chegar à interface.
+
+## Exportação DOCX
+
+O `DocumentRenderer` recebe o `GeneratedReport` e o `ReportTemplate` oficial. A gravação ocorre no Main Process, após seleção segura do destino:
+
+`GeneratedReport + ReportTemplate → DocumentRenderer → reports:export-docx → DOCX`
+
+O Renderer React não acessa Node.js, filesystem, SQLite ou Ollama diretamente; toda comunicação externa passa pelo preload tipado com `contextIsolation: true` e `nodeIntegration: false`.
+
+## Logging e diagnóstico
+
+O Main Process utiliza a abstração `Logger` em `electron/infrastructure/logging`, com `electron-log` somente como transporte. Os níveis disponíveis são `debug`, `info`, `warn` e `error`. Em produção o padrão é `info`; defina `SIEAR_LOG_LEVEL=debug` antes de iniciar a aplicação para diagnóstico detalhado.
+
+Cada chamada IPC recebe `requestId` e `correlationId` próprios, propagados pelas operações assíncronas do Main Process. Entradas relevantes registram contexto, operação e duração sem armazenar prompts, respostas do modelo, conteúdo de documentos, textos de relatórios ou caminhos completos.
+
+Os arquivos são armazenados no diretório padrão de logs do Electron definido pelo `electron-log`. Cada arquivo possui limite de 5 MiB; ao atingir o limite, o transporte mantém o arquivo anterior conforme a política de rotação da biblioteca. Logs de desenvolvimento também aparecem no console.
+
+Campos sensíveis, incluindo `password`, `token`, `apiKey`, `authorization`, `secret`, `prompt`, `response`, `content`, `text`, documentos e caminhos, são substituídos por `[REDACTED]`. Erros técnicos e stacks ficam somente no log local do backend e nunca são enviados nas respostas IPC.
+
+## Benchmark de desempenho
+
+O baseline real de criação de modelos é executado separadamente da suíte comum:
+
+```powershell
+$env:SIEAR_BENCHMARK_DOCX='C:\caminho\modelo.docx'
+npm.cmd run benchmark:baseline
+```
+
+Resultados e metodologia estão documentados em `docs/performance-baseline.md`. Os relatórios detalhados são gravados localmente em `benchmark-results/` e não armazenam o conteúdo do DOCX.
+
+O pipeline de criação mantém checkpoints versionados no mesmo SQLite dos modelos. Uma tentativa posterior reutiliza somente etapas concluídas cujo hash do documento, versões de contrato/analyzer/prompt, modelo e configuração ainda sejam compatíveis. O benchmark específico de retomada é opt-in:
+
+```powershell
+$env:SIEAR_BENCHMARK_DOCX='C:\caminho\modelo.docx'
+npm.cmd run benchmark:checkpoint
+```
+
+Detalhes e baseline estão em `docs/pipeline-checkpoints.md`.
+
+## Escrita: análise global e por seção
+
+A WritingAnalysis analisa um perfil global e cada seção separadamente, valida
+evidências por ID e repara somente a unidade inválida (até dois retries).
+Checkpoints intermediários permitem retomar unidades concluídas. O modelo permanece
+`qwen3:8b`. Documentação: [redesenho e medições](docs/writing-analysis-redesign.md).
+
+Teste real opt-in, fora da suíte comum (cinco execuções por padrão):
+
+```powershell
+$env:SIEAR_WRITING_ANALYSIS_DOCX='C:\caminho\referencia.docx'
+$env:SIEAR_WRITING_RUNS='5'
+npm.cmd run test:integration:writing
+```
+
+O relatório seguro de estabilidade é gravado em `benchmark-results/`.

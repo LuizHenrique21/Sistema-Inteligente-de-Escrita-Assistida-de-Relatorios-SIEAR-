@@ -1,11 +1,32 @@
-import { ipcMain } from 'electron'
+import { dialog, ipcMain } from 'electron'
+import { writeFile } from 'node:fs/promises'
 import { ReportExtractionService } from '../services/ai/report-extraction.service'
 import { ReportGenerationService } from '../services/ai/report-generation.service'
+import { UserInformationExtractor } from '../services/ai/user-information-extractor'
 import { OllamaService } from '../services/ollama/ollama.service'
-import { reportTemplateService } from '../services/templates/report-template.container'
+import type { ReportTemplateService } from '../services/templates/report-template.service'
+import { ReportGenerationPipeline } from '../services/reports/report-generation.pipeline'
+import { ReportGenerationPlanner } from '../services/reports/report-generation-planner'
+import { DocumentRenderer } from '../services/documents/document-renderer'
 import { createAiGenerateHandler } from './ai.handler'
 import { createReportExtractionHandler } from './report-extraction.handler'
 import { createReportGenerationHandler } from './report-generation.handler'
+import { createReportExportHandler } from './report-export.handler'
+import { getLogger } from '../infrastructure/logging/logger.runtime'
+import { withIpcLogging } from '../infrastructure/logging/ipc-logging'
+
+function sendReportProgress(event: Electron.IpcMainInvokeEvent) {
+  return (progress: {
+    stage: string
+    message: string
+    completedSections: number
+    totalSections: number
+    sectionName: string | null
+  }): void => {
+    if (!event.sender.isDestroyed())
+      event.sender.send('reports:generation-progress', progress)
+  }
+}
 
 const ollamaService = new OllamaService()
 const generate = createAiGenerateHandler(ollamaService)
@@ -13,18 +34,70 @@ const reportExtractionService = new ReportExtractionService(ollamaService)
 const extractReportInformation = createReportExtractionHandler(
   reportExtractionService,
 )
-const reportGenerationService = new ReportGenerationService(ollamaService)
-const generateReport = createReportGenerationHandler(
-  reportGenerationService,
-  reportTemplateService,
+const reportGenerationPipeline = new ReportGenerationPipeline(
+  new UserInformationExtractor(ollamaService),
+  new ReportGenerationPlanner(),
+  new ReportGenerationService(ollamaService),
 )
-
-export function registerAiIpc(): void {
-  ipcMain.handle('ai:generate', (_event, request: unknown) => generate(request))
-  ipcMain.handle('ai:extract-report-information', (_event, request: unknown) =>
-    extractReportInformation(request),
+export function registerAiIpc(templates: ReportTemplateService): void {
+  const ipcLogger = getLogger('AiIpc')
+  const generateReport = createReportGenerationHandler(
+    reportGenerationPipeline,
+    templates,
   )
-  ipcMain.handle('ai:generate-report', (_event, request: unknown) =>
-    generateReport(request),
+  const exportReport = createReportExportHandler(
+    templates,
+    new DocumentRenderer(),
+    {
+      select: async (report) => {
+        const safeName = report.templateName
+          .split('')
+          .filter((character) => character.charCodeAt(0) >= 32)
+          .join('')
+          .replace(/[<>:"/\\|?*]/g, '-')
+          .trim()
+        const result = await dialog.showSaveDialog({
+          title: 'Exportar relatório DOCX',
+          defaultPath: `${safeName || 'relatorio'}.docx`,
+          filters: [{ name: 'Documento do Word', extensions: ['docx'] }],
+        })
+        if (result.canceled || !result.filePath) return null
+        return result.filePath.toLocaleLowerCase().endsWith('.docx')
+          ? result.filePath
+          : `${result.filePath}.docx`
+      },
+    },
+    { write: (filePath, content) => writeFile(filePath, content) },
+  )
+  ipcMain.handle(
+    'ai:generate',
+    withIpcLogging('ai:generate', ipcLogger, (_event, request: unknown) =>
+      generate(request),
+    ),
+  )
+  ipcMain.handle(
+    'ai:extract-report-information',
+    withIpcLogging(
+      'ai:extract-report-information',
+      ipcLogger,
+      (_event, request: unknown) => extractReportInformation(request),
+    ),
+  )
+  ipcMain.handle(
+    'ai:generate-report',
+    withIpcLogging(
+      'ai:generate-report',
+      ipcLogger,
+      (event, request: unknown) =>
+        generateReport(request, sendReportProgress(event)),
+    ),
+  )
+  ipcMain.handle(
+    'reports:export-docx',
+    withIpcLogging(
+      'reports:export-docx',
+      ipcLogger,
+      (_event, request: unknown) => exportReport(request),
+    ),
   )
 }

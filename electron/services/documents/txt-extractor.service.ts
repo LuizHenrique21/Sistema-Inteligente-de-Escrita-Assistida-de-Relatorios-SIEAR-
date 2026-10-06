@@ -39,6 +39,24 @@ export class TxtExtractor implements DocumentExtractor {
         order: paragraphs.length + 1,
         style: isHeading ? 'heading' : 'paragraph',
         headingLevel: isHeading ? 1 : null,
+        sectionId: currentSection?.id ?? null,
+        numbering: null,
+        formatting: {
+          fontFamily: null,
+          fontSizePt: null,
+          bold: false,
+          italic: false,
+          underline: false,
+          alignment: null,
+          lineSpacing: null,
+          spaceBeforePt: null,
+          spaceAfterPt: null,
+          indentLeftPt: null,
+          indentRightPt: null,
+          firstLineIndentPt: null,
+          styleId: null,
+        },
+        pageBreakBefore: false,
       })
       if (isHeading) {
         currentSection = {
@@ -47,6 +65,7 @@ export class TxtExtractor implements DocumentExtractor {
           level: 1,
           order: sections.length + 1,
           content: '',
+          parentSectionId: null,
         }
         sections.push(currentSection)
       } else if (currentSection) {
@@ -60,10 +79,51 @@ export class TxtExtractor implements DocumentExtractor {
       fileName: path.basename(filePath),
       fileType: 'txt',
       text: text.trim(),
+      elements: paragraphs.map((paragraph) => ({
+        id: paragraph.id,
+        type: paragraph.style === 'heading' ? 'heading' : 'paragraph',
+        order: paragraph.order,
+      })),
       sections,
       paragraphs,
+      headings: sections.map((section) => {
+        const paragraph = paragraphs.find(
+          (item) =>
+            item.headingLevel === section.level &&
+            item.text.includes(section.title),
+        )
+        return {
+          id: randomUUID(),
+          paragraphId: paragraph?.id ?? '',
+          title: section.title,
+          level: section.level,
+          order: section.order,
+          sectionId: section.id,
+        }
+      }),
+      lists: [],
       tables: [],
-      metadata: { fileSize: file.size, extractedAt: new Date().toISOString() },
+      figures: [],
+      headers: [],
+      footers: [],
+      pageInformation: {
+        widthPt: null,
+        heightPt: null,
+        orientation: null,
+        margins: { topPt: null, rightPt: null, bottomPt: null, leftPt: null },
+        pageBreakCount: 0,
+        hasPageNumbering: false,
+      },
+      formatting: { defaultParagraph: {} },
+      styles: [],
+      metadata: {
+        fileSize: file.size,
+        extractedAt: new Date().toISOString(),
+        title: null,
+        author: null,
+        createdAt: null,
+        modifiedAt: null,
+      },
     }
   }
 }
