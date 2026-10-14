@@ -1,3 +1,5 @@
+import type { DocxReportLayout } from './docx-layout'
+
 export interface TextFormatting {
   fontFamily: string | null
   fontSizePt: number | null
@@ -116,6 +118,7 @@ export interface FooterStyle {
  * numeração multinível completa, temas nem field codes.
  */
 export interface FormattingPattern {
+  docxLayout?: DocxReportLayout
   documentStyle: DocumentStyle
   headingStyles: HeadingStyle[]
   paragraphStyles: ParagraphStyle[]

@@ -4,21 +4,21 @@ import styles from './ReportGenerationProgress.module.css'
 function percentage(progress: Progress): number {
   if (progress.stage === 'extracting') return 12
   if (progress.stage === 'planning') return 28
-  if (progress.stage === 'finalizing') return 100
+  if (progress.stage === 'finalizing') return 95
   if (!progress.totalSections) return 30
-  return Math.round(30 + (progress.completedSections / progress.totalSections) * 62)
+  return Math.round(
+    30 + (progress.completedSections / progress.totalSections) * 62,
+  )
 }
 
-export function ReportGenerationProgress({
-  progress,
-}: {
-  progress: Progress
-}) {
+export function ReportGenerationProgress({ progress }: { progress: Progress }) {
   const value = percentage(progress)
   const sectionCounter =
     progress.stage === 'writing' && progress.totalSections > 0
       ? `Seção ${Math.min(progress.completedSections + 1, progress.totalSections)} de ${progress.totalSections}`
-      : 'Preparando geração'
+      : progress.stage === 'finalizing'
+        ? 'Revisão final do relatório'
+        : 'Preparando geração'
 
   return (
     <section className={styles.progress} aria-live="polite">

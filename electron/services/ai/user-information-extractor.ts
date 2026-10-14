@@ -135,7 +135,11 @@ export class UserInformationExtractor {
     template: ReportTemplate,
   ): Promise<StructuredActivity> {
     const prompt = buildUserInformationExtractionPrompt(text, template)
-    let response = await this.generator.generateJson(prompt, EXTRACTION_SCHEMA)
+    let response = await this.generator.generateJson(
+      prompt,
+      EXTRACTION_SCHEMA,
+      { think: false, temperature: 0, numPredict: 2500 },
+    )
     let validation = validateResponse(response, text)
 
     if (!validation.valid) {
@@ -146,6 +150,7 @@ export class UserInformationExtractor {
       response = await this.generator.generateJson(
         buildRepairPrompt(prompt, response, validation.reasons),
         EXTRACTION_SCHEMA,
+        { think: false, temperature: 0, numPredict: 2500 },
       )
       validation = validateResponse(response, text)
     }
@@ -273,10 +278,10 @@ function groundedFallback(source: string): StructuredActivity | null {
     activities: [
       {
         description: sentences[0]!,
-        procedures: sentences.slice(0, 12),
+        procedures: sentences,
         result: result ?? null,
         problems: [],
-        evidence: sentences.slice(0, 12),
+        evidence: sentences,
       },
     ],
   }

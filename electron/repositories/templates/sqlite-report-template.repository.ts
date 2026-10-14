@@ -11,6 +11,7 @@ import {
   type ReportTemplateRepository,
 } from './report-template.repository'
 import { getLogger } from '../../infrastructure/logging/logger.runtime'
+import { hashCheckpointResult } from '../../services/templates/pipeline-checkpoint.hash'
 
 const logger = getLogger('SqliteReportTemplateRepository')
 
@@ -97,6 +98,28 @@ export class SqliteReportTemplateRepository implements ReportTemplateRepository 
     this.database.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;')
     runMigrations(this.database, DATABASE_MIGRATIONS)
     logger.info('Template database initialized')
+  }
+
+  /** Source is linked by consolidation ID + document hash, never by file name. */
+  async findSourceDocument(templateId: string): Promise<unknown | null> {
+    const row = this.database
+      .prepare(
+        `
+      SELECT extraction.result_json, extraction.result_hash
+      FROM pipeline_checkpoints AS consolidation
+      JOIN pipeline_checkpoints AS extraction
+        ON extraction.document_hash = consolidation.document_hash
+      WHERE consolidation.stage = 'consolidation' AND consolidation.status = 'completed'
+        AND json_extract(consolidation.result_json, '$.metadata.id') = ?
+        AND extraction.stage = 'extraction' AND extraction.status = 'completed'
+      ORDER BY extraction.updated_at DESC LIMIT 1
+    `,
+      )
+      .get(templateId) as
+      { result_json: string; result_hash: string } | undefined
+    if (!row) return null
+    const result: unknown = JSON.parse(row.result_json)
+    return hashCheckpointResult(result) === row.result_hash ? result : null
   }
 
   async create(template: ReportTemplate): Promise<ReportTemplate> {

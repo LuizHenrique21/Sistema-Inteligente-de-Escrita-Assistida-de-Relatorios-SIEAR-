@@ -62,9 +62,9 @@ export function createReportGenerationHandler(
           },
         }
       }
-      return onProgress
+      return await (onProgress
         ? generator.generate(request.text.trim(), template, onProgress)
-        : generator.generate(request.text.trim(), template)
+        : generator.generate(request.text.trim(), template))
     } catch (error: unknown) {
       if (
         error instanceof ReportGenerationServiceError ||

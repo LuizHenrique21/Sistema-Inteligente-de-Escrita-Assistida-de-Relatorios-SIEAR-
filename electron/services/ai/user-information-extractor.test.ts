@@ -36,6 +36,7 @@ describe('UserInformationExtractor', () => {
     expect(generator.generateJson).toHaveBeenCalledWith(
       expect.stringContaining('Não invente datas'),
       expect.any(Object),
+      expect.objectContaining({ think: false, temperature: 0 }),
     )
   })
 

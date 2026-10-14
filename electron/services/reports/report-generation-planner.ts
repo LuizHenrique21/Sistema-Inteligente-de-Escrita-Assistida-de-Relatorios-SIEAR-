@@ -4,6 +4,7 @@ import type {
   StructureField,
 } from '../../../src/domain/templates'
 import type { ReportTemplate } from '../../../src/domain/templates/report-template'
+import { getReportUnit } from '../../../src/domain/templates/report-unit'
 import type {
   MissingRequiredInformation,
   PlannedReportSection,
@@ -82,6 +83,7 @@ function activityIndexes(
 }
 
 interface FlatSection {
+  sourceName?: string
   section: SectionPattern
   parentSectionId: string | null
   sectionId: string
@@ -114,16 +116,16 @@ function flattenSections(template: ReportTemplate): FlatSection[] {
 
 function aggregateSectionTitle(sectionName: string): string | null {
   const match = sectionName.match(
-    /^\s*(sprint|atividade|activity)\s*(?:n[ºo.]?\s*)?\d+\b/i,
+    /^\s*(.+?)\s+(?:n[ºo.]?\s*)?\d+(?:\s|$|[—–-])/i,
   )
   if (!match?.[1]) return null
-  const value = match[1].toLocaleLowerCase('pt-BR')
-  if (value === 'activity') return 'Atividade'
-  return `${value.slice(0, 1).toLocaleUpperCase('pt-BR')}${value.slice(1)}`
+  return match[1].trim()
 }
 
 /** A collection of numbered reports contributes one representative unit. */
-function aggregateReportUnit(sections: FlatSection[]): AggregateReportUnit | null {
+function aggregateReportUnit(
+  sections: FlatSection[],
+): AggregateReportUnit | null {
   const groups = new Map<string, FlatSection[]>()
   for (const item of sections) {
     if (item.parentSectionId !== null) continue
@@ -139,6 +141,21 @@ function aggregateReportUnit(sections: FlatSection[]): AggregateReportUnit | nul
   if (!group) return null
 
   const [title, roots] = group
+  // A number alone does not distinguish a collection from ordinary chapters.
+  // Older templates must also carry a repeated ordered subsection structure.
+  const sequence = roots[0]!.section.children.map((child) =>
+    normalize(child.name),
+  )
+  if (
+    sequence.length < 2 ||
+    !roots.every(
+      (item) =>
+        JSON.stringify(
+          item.section.children.map((child) => normalize(child.name)),
+        ) === JSON.stringify(sequence),
+    )
+  )
+    return null
   const childrenByParent = new Map<string, FlatSection[]>()
   for (const item of sections) {
     if (!item.parentSectionId) continue
@@ -153,7 +170,8 @@ function aggregateReportUnit(sections: FlatSection[]): AggregateReportUnit | nul
   const sectionIds = new Set<string>()
   const visit = (sectionId: string): void => {
     sectionIds.add(sectionId)
-    for (const child of childrenByParent.get(sectionId) ?? []) visit(child.sectionId)
+    for (const child of childrenByParent.get(sectionId) ?? [])
+      visit(child.sectionId)
   }
   visit(representative.sectionId)
   return { sectionIds, title }
@@ -169,14 +187,36 @@ export class ReportGenerationPlanner {
       activities: information.activities.length,
     })
     const flattenedSections = flattenSections(template)
-    const aggregateUnit = aggregateReportUnit(flattenedSections)
-    const sourceSections = aggregateUnit
-      ? flattenedSections.filter((item) => aggregateUnit.sectionIds.has(item.sectionId))
-      : flattenedSections
+    const layout = template.formattingPattern.docxLayout
+    const reportUnit = getReportUnit(template)
+    const aggregateUnit =
+      layout || reportUnit ? null : aggregateReportUnit(flattenedSections)
+    const sourceSections: FlatSection[] = reportUnit
+      ? reportUnit.sections.map((item, index) => ({
+          sectionId: `report-section-${index + 1}`,
+          parentSectionId: null,
+          sourceName: item.sourceSectionName,
+          section: {
+            name: item.name,
+            level: 1,
+            order: index + 1,
+            purpose: item.name,
+            required: true,
+            repeatable: false,
+            children: [],
+          },
+        }))
+      : aggregateUnit
+        ? flattenedSections.filter((item) =>
+            aggregateUnit.sectionIds.has(item.sectionId),
+          )
+        : flattenedSections
     const sourceSectionNames = new Set(
       sourceSections.map((item) => normalize(item.section.name)),
     )
-    const missing = template.fields
+    // Repeated author/date labels in an archive are sample metadata, not an
+    // instruction to require those same values for a new independent report.
+    const missing = (reportUnit ? [] : template.fields)
       .filter(
         (field) =>
           field.required && !hasFact(information, field.name, field.label),
@@ -184,6 +224,7 @@ export class ReportGenerationPlanner {
       .map(missingField)
 
     for (const semanticSection of template.semanticPattern.sections) {
+      if (reportUnit) continue
       if (
         aggregateUnit &&
         !sourceSectionNames.has(normalize(semanticSection.sectionName))
@@ -224,11 +265,12 @@ export class ReportGenerationPlanner {
 
     const factNames = [...new Set(information.facts.map((fact) => fact.name))]
     const sections: PlannedReportSection[] = sourceSections.map(
-      ({ section, parentSectionId, sectionId }) => {
-        const semantics =
-          template.semanticPattern.sections.find(
-            (item) => normalize(item.sectionName) === normalize(section.name),
-          ) ?? null
+      ({ section, parentSectionId, sectionId, sourceName }) => {
+        const semantics = reportUnit
+          ? null
+          : (template.semanticPattern.sections.find(
+              (item) => normalize(item.sectionName) === normalize(section.name),
+            ) ?? null)
         return {
           sectionId,
           sectionName:
@@ -241,23 +283,27 @@ export class ReportGenerationPlanner {
           required: section.required,
           repeatable: section.repeatable,
           purpose: section.purpose,
-          structure: section,
+          structure: sourceName ? { ...section, name: sourceName } : section,
           writingStyle:
             template.writingPattern.sectionStyles.find(
-              (item) => normalize(item.sectionName) === normalize(section.name),
+              (item) =>
+                normalize(item.sectionName) ===
+                normalize(sourceName ?? section.name),
             ) ?? null,
           semantics,
           formatting: {
             headingStyles: template.formattingPattern.headingStyles.filter(
               (style) =>
                 style.sectionNames.some(
-                  (name) => normalize(name) === normalize(section.name),
+                  (name) =>
+                    normalize(name) === normalize(sourceName ?? section.name),
                 ),
             ),
             paragraphStyles: template.formattingPattern.paragraphStyles.filter(
               (style) =>
                 style.sectionName !== null &&
-                normalize(style.sectionName) === normalize(section.name),
+                normalize(style.sectionName) ===
+                  normalize(sourceName ?? section.name),
             ),
           },
           factNames,
@@ -289,7 +335,7 @@ export class ReportGenerationPlanner {
     timer.end('Report planning completed', {
       sections: plan.sections.length,
       missing: plan.missing.length,
-      aggregateTemplate: aggregateUnit !== null,
+      aggregateTemplate: reportUnit !== null || aggregateUnit !== null,
     })
     return plan
   }

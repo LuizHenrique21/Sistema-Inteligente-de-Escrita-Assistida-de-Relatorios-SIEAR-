@@ -4,6 +4,7 @@ import path from 'node:path'
 import JSZip from 'jszip'
 import mammoth from 'mammoth'
 import { DocumentExtractionError } from './document-errors'
+import { learnDocxReportLayout } from './docx-report-layout'
 import type {
   DocumentExtractor,
   DocumentHeaderFooter,
@@ -480,7 +481,7 @@ export class DocxExtractor implements DocumentExtractor {
             new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'),
           )?.[1] ?? '',
         ) || null
-      return {
+      const result: DocumentRepresentation = {
         fileName: path.basename(filePath),
         fileType: 'docx',
         text,
@@ -532,6 +533,8 @@ export class DocxExtractor implements DocumentExtractor {
         },
         styles,
       }
+      result.docxLayout = await learnDocxReportLayout(zip, documentXml, result)
+      return result
     } catch (error: unknown) {
       if (error instanceof DocumentExtractionError) throw error
       throw new DocumentExtractionError(

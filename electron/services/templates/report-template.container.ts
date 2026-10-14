@@ -6,6 +6,7 @@ import {
   type ReportTemplateCreationPipeline,
 } from './report-template-creation.service'
 import { ReportTemplateService } from './report-template.service'
+import { recoverLegacyReportUnit } from './legacy-report-unit'
 
 export interface ReportTemplateContainer {
   repository: ReportTemplateRepository
@@ -47,7 +48,11 @@ export function createProductionReportTemplateCreationContainer(
   databasePath: string,
 ): ProductionReportTemplateCreationContainer {
   const repository = new SqliteReportTemplateRepository(databasePath)
-  const service = new ReportTemplateService(repository)
+  const service = new ReportTemplateService(repository, undefined, (template) =>
+    recoverLegacyReportUnit(template, (id) =>
+      repository.findSourceDocument(id),
+    ),
+  )
   return {
     repository,
     service,

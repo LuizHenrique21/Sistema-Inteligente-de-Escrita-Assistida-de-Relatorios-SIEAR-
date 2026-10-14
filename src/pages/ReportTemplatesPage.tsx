@@ -6,6 +6,7 @@ import { TemplateList } from '../components/templates/TemplateList'
 import { templatesService } from '../services/templates.service'
 import type { TemplateImportProgress } from '../types/template-import'
 import type { ReportTemplate } from '../domain/templates/report-template'
+import { getReportUnit } from '../domain/templates/report-unit'
 import { estimateTemplateCreationTime } from '../services/template-creation-time'
 import styles from './ReportTemplatesPage.module.css'
 
@@ -277,7 +278,11 @@ export function ReportTemplatesPage() {
               <dl className={styles.quickFacts}>
                 <div>
                   <dt>Seções</dt>
-                  <dd>{draft.structurePattern.sections.length}</dd>
+                  <dd>
+                    {getReportUnit(draft)?.sections.length ??
+                      draft.formattingPattern.docxLayout?.sections.length ??
+                      draft.structurePattern.sections.length}
+                  </dd>
                 </div>
                 <div>
                   <dt>Campos</dt>

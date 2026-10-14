@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { GeneratedReport } from '../../src/types/generated-report'
 import { createRichReportTemplate } from '../testing/report-template.fixture'
 import { createReportGenerationHandler } from './report-generation.handler'
+import { ReportGenerationServiceError } from '../services/ai/report-generation.error'
 
 const text = 'Troquei o HD do notebook Dell.'
 const template = createRichReportTemplate('technical-report')
@@ -51,6 +52,25 @@ describe('contrato ai:generate-report', () => {
     ).resolves.toMatchObject({
       success: false,
       error: { code: 'TEMPLATE_NOT_FOUND' },
+    })
+  })
+
+  it('converte rejeições assíncronas da geração em erro controlado', async () => {
+    const handle = createReportGenerationHandler(
+      {
+        generate: vi
+          .fn()
+          .mockRejectedValue(
+            new ReportGenerationServiceError('Revisão inválida.'),
+          ),
+      },
+      { getById: vi.fn().mockResolvedValue(template) },
+    )
+    await expect(
+      handle({ text, templateId: template.metadata.id }),
+    ).resolves.toEqual({
+      success: false,
+      error: { code: 'INVALID_MODEL_RESPONSE', message: 'Revisão inválida.' },
     })
   })
 })

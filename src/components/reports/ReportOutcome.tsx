@@ -137,6 +137,11 @@ function GeneratedDocument({
         </button>
       </header>
       <div className={styles.documentBody}>
+        {report.notices?.map((notice) => (
+          <p className={styles.warning} key={notice}>
+            {notice}
+          </p>
+        ))}
         {[...report.sections]
           .sort((first, second) => first.order - second.order)
           .map((section) => (

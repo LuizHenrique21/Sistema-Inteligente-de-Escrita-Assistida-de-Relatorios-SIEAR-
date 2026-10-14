@@ -80,7 +80,7 @@ describe('ReportGenerationPlanner', () => {
     ).toEqual(template.formattingPattern.documentStyle.margins)
   })
 
-  it('selects one report when a template is a sprint collection', () => {
+  it('não elimina capítulos apenas porque seus títulos são numerados', () => {
     const sprint = (name: string, order: number) => ({
       name,
       level: 1,
@@ -103,9 +103,9 @@ describe('ReportGenerationPlanner', () => {
 
     const plan = new ReportGenerationPlanner().plan(incomplete, sprintTemplate)
 
-    expect(plan.sections).toHaveLength(1)
+    expect(plan.sections).toHaveLength(3)
     expect(plan.sections[0]).toMatchObject({
-      sectionName: 'Sprint',
+      sectionName: 'Sprint 0 - Setup Inicial',
       sectionId: expect.stringContaining('sprint0setupinicial'),
     })
   })
@@ -120,15 +120,17 @@ describe('ReportGenerationPipeline', () => {
       writer,
     )
     const result = await pipeline.generate('Troquei o HD.', template)
-    expect(result).toMatchObject({
-      success: true,
-      requiresInput: true,
-      questions: ['Informe Responsável.'],
-    })
+    expect(result).toMatchObject({ success: true, requiresInput: true })
+    if (!result.success || !('requiresInput' in result)) throw new Error()
+    expect(result.questions).toContain('Informe Responsável.')
+    expect(result.questions).toEqual(['Informe Responsável.'])
     expect(writer.generate).not.toHaveBeenCalled()
   })
 
   it('gera somente após preencher os dados obrigatórios', async () => {
+    const detailedEvidence = Array.from({ length: 130 }, () => 'detalhe').join(
+      ' ',
+    )
     const complete = {
       ...incomplete,
       facts: [
@@ -140,6 +142,10 @@ describe('ReportGenerationPipeline', () => {
           evidence: 'Ana',
         },
       ],
+      activities: incomplete.activities.map((activity) => ({
+        ...activity,
+        evidence: [...activity.evidence, detailedEvidence],
+      })),
     }
     const report: GeneratedReport = {
       id: 'report',

@@ -11,10 +11,11 @@ import type {
 } from '../../../src/domain/templates/formatting-pattern'
 import type { ReportTemplate } from '../../../src/domain/templates/report-template'
 import { getLogger } from '../../infrastructure/logging/logger.runtime'
+import { layoutParagraph } from './docx-report-layout'
 
 const logger = getLogger('DocumentRenderer')
 
-/** Limitações decorrentes de dados que o contrato aprendido ainda não fornece. */
+/** Limitações do renderizador reconstruído, usado sem um layout DOCX compatível. */
 export const DOCUMENT_RENDERER_LIMITATIONS = [
   'Figuras usam dimensões padrão porque FigureStyle não armazena largura e altura.',
   'Elementos gerados não informam nível de lista; listas são renderizadas no nível zero.',
@@ -207,6 +208,60 @@ export class DocumentRenderer {
       sections: report.sections.length,
     })
     const pattern = template.formattingPattern
+    if (
+      pattern.docxLayout &&
+      report.sections.every(
+        (section) =>
+          pattern.docxLayout!.sections.some(
+            (layout) => layout.name === section.name,
+          ) &&
+          (!section.elements ||
+            section.elements.every((element) => element.type === 'paragraph')),
+      )
+    ) {
+      const layout = pattern.docxLayout
+      const source = await JSZip.loadAsync(layout.packageBase64, {
+        base64: true,
+      })
+      const original = await source.file('word/document.xml')!.async('text')
+      const page =
+        [...original.matchAll(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/g)].at(
+          -1,
+        )?.[0] ?? ''
+      const paragraphs: string[] = layout.title
+        ? [layoutParagraph(layout.title.text, layout.title.layout)]
+        : []
+      for (const section of [...report.sections].sort(
+        (a, b) => a.order - b.order,
+      )) {
+        const appearance = layout.sections.find(
+          (item) => item.name === section.name,
+        )!
+        paragraphs.push(layoutParagraph(section.name, appearance.heading))
+        for (const content of section.content
+          .split(/\r?\n+/)
+          .map((line) => line.trim())
+          .filter(Boolean))
+          paragraphs.push(layoutParagraph(content, appearance.paragraph))
+      }
+      source.file(
+        'word/document.xml',
+        original.replace(
+          /<w:body\b[^>]*>[\s\S]*?<\/w:body>/,
+          () => `<w:body>${paragraphs.join('')}${page}</w:body>`,
+        ),
+      )
+      const output = await source.generateAsync({
+        type: 'nodebuffer',
+        compression: 'DEFLATE',
+      })
+      timer.end('Document render completed', {
+        outputBytes: output.byteLength,
+        originalLayout: true,
+        sections: report.sections.length,
+      })
+      return output
+    }
     const zip = new JSZip()
     const imageFiles: Array<{
       path: string
@@ -244,22 +299,29 @@ export class DocumentRenderer {
     const body: string[] = []
     const orderedSections = report.sections
     for (const section of orderedSections) {
-      const structuralLevel = sectionLevelByName.get(section.name) ?? 1
+      const sourceSectionName =
+        template.structurePattern.reportUnit?.sections.some(
+          (item) => item.name === section.name,
+        )
+          ? section.name
+          : (section.sourceSectionName ?? section.name)
+      const structuralLevel = sectionLevelByName.get(sourceSectionName) ?? 1
       const fallbackHeadingIndex = pattern.headingStyles.findIndex(
         (style) => style.level === structuralLevel,
       )
       const fallbackHeading =
         pattern.headingStyles[fallbackHeadingIndex] ?? pattern.headingStyles[0]
-      const learnedHeading = headingStyleBySection.get(section.name) ?? {
+      const learnedHeading = headingStyleBySection.get(sourceSectionName) ?? {
         id: fallbackHeading
           ? `SIEARHeading${Math.max(0, fallbackHeadingIndex) + 1}`
           : 'Normal',
         level: fallbackHeading?.level ?? structuralLevel,
         format: fallbackHeading?.formatting ?? {},
       }
-      const pageBreak = pattern.documentStyle.pageBreakBeforeSections.includes(
-        section.name,
-      )
+      const pageBreak =
+        pattern.documentStyle.pageBreakBeforeSections.includes(
+          sourceSectionName,
+        )
       body.push(
         paragraph(section.name, learnedHeading.format, learnedHeading.id, {
           pageBreak,
@@ -267,10 +329,10 @@ export class DocumentRenderer {
       )
       const paragraphStyle =
         pattern.paragraphStyles.find(
-          (style) => style.sectionName === section.name,
+          (style) => style.sectionName === sourceSectionName,
         ) ?? pattern.paragraphStyles[0]
       const sectionFont = pattern.documentStyle.sectionFonts.find(
-        (font) => font.sectionName === section.name,
+        (font) => font.sectionName === sourceSectionName,
       )
       const paragraphFormat = paragraphStyle?.formatting ?? {
         fontFamily:

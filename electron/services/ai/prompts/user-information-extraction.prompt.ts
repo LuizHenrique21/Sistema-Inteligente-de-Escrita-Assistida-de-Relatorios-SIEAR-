@@ -1,25 +1,30 @@
 import type { ReportTemplate } from '../../../../src/domain/templates/report-template'
+import { getReportUnit } from '../../../../src/domain/templates/report-unit'
 
 export function buildUserInformationExtractionPrompt(
   text: string,
   template: ReportTemplate,
 ): string {
+  const reportUnit = getReportUnit(template)
   const relevantTemplate = {
     documentType: template.metadata.documentType,
-    fields: template.fields.map((field) => ({
+    fields: (reportUnit ? [] : template.fields).map((field) => ({
       name: field.name,
       label: field.label,
       type: field.type,
       required: field.required,
     })),
-    sections: template.semanticPattern.sections.map((section) => ({
-      name: section.sectionName,
-      semanticPurpose: section.purpose,
-      expectedInformation: section.expectedInformation,
-      excludedInformation: section.excludedInformation,
-    })),
-    semanticFields: template.semanticPattern.fields,
-    activityPatterns: template.activityPatterns,
+    sections: reportUnit
+      ? reportUnit.sections.map((section) => ({
+          name: section.name,
+        }))
+      : template.semanticPattern.sections.map((section) => ({
+          name: section.sectionName,
+          semanticPurpose: section.purpose,
+          expectedInformation: section.expectedInformation,
+          excludedInformation: section.excludedInformation,
+        })),
+    semanticFields: reportUnit ? [] : template.semanticPattern.fields,
   }
   return `Você é o UserInformationExtractor do SIEAR.
 

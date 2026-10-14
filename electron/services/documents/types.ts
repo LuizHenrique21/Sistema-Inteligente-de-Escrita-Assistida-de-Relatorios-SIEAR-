@@ -1,4 +1,5 @@
 import type { ParagraphFormatting } from '../../../src/domain/templates/formatting-pattern'
+import type { DocxReportLayout } from '../../../src/domain/templates/docx-layout'
 
 export type {
   ParagraphFormatting,
@@ -117,6 +118,7 @@ export interface DocumentMetadata {
   modifiedAt: string | null
 }
 export interface DocumentRepresentation {
+  docxLayout?: DocxReportLayout
   fileName: string
   fileType: DocumentFileType
   text: string

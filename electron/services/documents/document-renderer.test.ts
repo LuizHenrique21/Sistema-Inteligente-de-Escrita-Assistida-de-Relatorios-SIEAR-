@@ -297,4 +297,30 @@ describe('DocumentRenderer', () => {
       ['A', 'B'],
     ])
   })
+
+  it('usa o estilo da seção de origem quando o título gerado foi generalizado', async () => {
+    const aggregateReport: GeneratedReport = {
+      ...report,
+      sections: [
+        {
+          id: 'sprint-0',
+          name: 'Sprint',
+          sourceSectionName: 'Resultado',
+          order: 1,
+          content: 'Atividade registrada.',
+          elements: [{ type: 'paragraph', content: 'Atividade registrada.' }],
+        },
+      ],
+    }
+
+    const buffer = await new DocumentRenderer().render(
+      aggregateReport,
+      template,
+    )
+    const zip = await JSZip.loadAsync(buffer)
+    const documentXml = await zip.file('word/document.xml')!.async('text')
+
+    expect(documentXml).toContain('<w:pStyle w:val="SIEARHeading2"/>')
+    expect(documentXml).toContain('<w:pStyle w:val="SIEARParagraph2"/>')
+  })
 })

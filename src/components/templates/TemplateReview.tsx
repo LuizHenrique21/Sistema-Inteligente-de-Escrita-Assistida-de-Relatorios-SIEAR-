@@ -1,4 +1,5 @@
 import type { ReportTemplate } from '../../domain/templates/report-template'
+import { getReportUnit } from '../../domain/templates/report-unit'
 import styles from './TemplateReview.module.css'
 
 function isObject(value: unknown): value is object {
@@ -29,14 +30,16 @@ function RichValue({ value }: { value: unknown }) {
   if (isObject(value)) {
     return (
       <dl className={styles.objectGrid}>
-        {Object.entries(value).map(([key, item]) => (
-          <div key={key}>
-            <dt>{key}</dt>
-            <dd>
-              <RichValue value={item} />
-            </dd>
-          </div>
-        ))}
+        {Object.entries(value)
+          .filter(([key]) => key !== 'packageBase64')
+          .map(([key, item]) => (
+            <div key={key}>
+              <dt>{key}</dt>
+              <dd>
+                <RichValue value={item} />
+              </dd>
+            </div>
+          ))}
       </dl>
     )
   }
@@ -62,7 +65,12 @@ function PatternSection({
 
 export function TemplateReview({ template }: { template: ReportTemplate }) {
   const summary = [
-    ['Seções', template.structurePattern.sections.length],
+    [
+      'Seções',
+      getReportUnit(template)?.sections.length ??
+        template.formattingPattern.docxLayout?.sections.length ??
+        template.structurePattern.sections.length,
+    ],
     ['Campos', template.fields.length],
     ['Atividades', template.activityPatterns.length],
     ['Estilos', template.writingPattern.sectionStyles.length],

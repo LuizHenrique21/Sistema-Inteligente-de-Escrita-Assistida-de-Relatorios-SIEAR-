@@ -1,3 +1,5 @@
+import type { ReportUnitPattern } from './report-unit'
+
 export type StructureFieldType = 'text' | 'date' | 'number' | 'boolean'
 
 export interface FieldEvidence {
@@ -41,6 +43,7 @@ export interface RecurringElement {
 }
 
 export interface StructurePattern {
+  reportUnit?: ReportUnitPattern
   documentType: string
   mainTitle: string | null
   hierarchy: SectionPattern[]

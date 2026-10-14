@@ -15,6 +15,8 @@ import type {
 export interface GeneratedReportSection {
   id: string
   name: string
+  /** Name of the learned source section, used only to reproduce formatting. */
+  sourceSectionName?: string
   order: number
   content: string
   elements?: GeneratedReportElement[]
@@ -34,6 +36,7 @@ export type GeneratedReportElement =
   | { type: 'page-break' }
 
 export interface GeneratedReport {
+  notices?: string[]
   id: string
   templateId: string
   templateName: string
@@ -47,10 +50,7 @@ export interface GenerateReportRequest {
 }
 
 export type ReportGenerationStage =
-  | 'extracting'
-  | 'planning'
-  | 'writing'
-  | 'finalizing'
+  'extracting' | 'planning' | 'writing' | 'finalizing'
 
 export interface ReportGenerationProgress {
   stage: ReportGenerationStage
@@ -95,6 +95,8 @@ export interface StructuredActivityItem {
 }
 
 export interface StructuredActivity {
+  /** Original user narrative, preserved by the main-process pipeline. */
+  sourceText?: string
   facts: StructuredFact[]
   activities: StructuredActivityItem[]
 }

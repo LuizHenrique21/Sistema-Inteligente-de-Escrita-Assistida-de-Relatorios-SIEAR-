@@ -1,4 +1,5 @@
 import type { ReportTemplate } from '../../domain/templates/report-template'
+import { getReportUnit } from '../../domain/templates/report-unit'
 import type { ReportGenerationProgress } from '../../types/generated-report'
 import { PortalSelect } from '../ui/PortalSelect'
 import { ReportGenerationProgress as GenerationProgress } from './ReportGenerationProgress'
@@ -124,6 +125,7 @@ export function ReportComposer({
 }
 
 function TemplateSummary({ template }: { template: ReportTemplate }) {
+  const reportUnit = getReportUnit(template)
   return (
     <aside className={styles.templateSummary} aria-label="Modelo selecionado">
       <div className={styles.templateIcon} aria-hidden="true">
@@ -133,9 +135,16 @@ function TemplateSummary({ template }: { template: ReportTemplate }) {
         <strong>{template.metadata.name}</strong>
         <span>{template.metadata.description}</span>
         <small>
-          {template.structurePattern.sections.length} seções · Linguagem{' '}
-          {template.writingPattern.globalStyle.formality}
+          {reportUnit?.sections.length ??
+            template.formattingPattern.docxLayout?.sections.length ??
+            template.structurePattern.sections.length}{' '}
+          seções · Linguagem {template.writingPattern.globalStyle.formality}
         </small>
+        {reportUnit && (
+          <small>
+            Modelo reconhecido como compilado · geração de um relatório por vez
+          </small>
+        )}
       </div>
     </aside>
   )

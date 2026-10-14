@@ -10,8 +10,8 @@ import type {
 import { getLogger } from '../../infrastructure/logging/logger.runtime'
 
 const logger = getLogger('FormattingAnalysisService')
-export const FORMATTING_ANALYZER_VERSION = '1' as const
-export const FORMATTING_PATTERN_STAGE_VERSION = '1' as const
+export const FORMATTING_ANALYZER_VERSION = '2' as const
+export const FORMATTING_PATTERN_STAGE_VERSION = '2' as const
 import type {
   DocumentRepresentation,
   DocumentStyle as SourceDocumentStyle,
@@ -287,6 +287,9 @@ export class FormattingAnalysisService {
     })
 
     const result: FormattingPattern = {
+      ...(document.docxLayout
+        ? { docxLayout: structuredClone(document.docxLayout) }
+        : {}),
       documentStyle: {
         predominantFont: predominant(fontValues),
         predominantFontSizePt: predominant(sizeValues),

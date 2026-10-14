@@ -39,6 +39,9 @@ export class ReportTemplateService {
   constructor(
     private readonly repository: ReportTemplateRepository,
     private readonly now: ReportTemplateClock = () => new Date().toISOString(),
+    private readonly enrich: (
+      template: ReportTemplate,
+    ) => Promise<ReportTemplate> = async (template) => template,
   ) {}
 
   async create(template: ReportTemplate): Promise<ReportTemplate> {
@@ -57,12 +60,16 @@ export class ReportTemplateService {
   async getById(id: string): Promise<ReportTemplate | null> {
     logger.debug('Template getById', { templateId: id })
     const template = await this.repository.getById(id)
-    return template ? cloneTemplate(template) : null
+    return template ? this.enrich(cloneTemplate(template)) : null
   }
 
   async getAll(): Promise<ReportTemplate[]> {
     logger.debug('Template getAll')
-    return (await this.repository.getAll()).map(cloneTemplate)
+    return Promise.all(
+      (await this.repository.getAll()).map((template) =>
+        this.enrich(cloneTemplate(template)),
+      ),
+    )
   }
 
   async update(template: ReportTemplate): Promise<ReportTemplate> {

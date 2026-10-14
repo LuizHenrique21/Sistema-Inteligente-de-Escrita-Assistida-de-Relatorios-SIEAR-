@@ -60,6 +60,7 @@ export class ReportGenerationPipeline {
         text,
         template,
       )
+      information.sourceText = text
       onProgress?.({
         stage: 'planning',
         message: 'Organizando a estrutura do relatório...',

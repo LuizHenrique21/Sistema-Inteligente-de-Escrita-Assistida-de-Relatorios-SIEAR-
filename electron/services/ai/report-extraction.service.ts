@@ -1,5 +1,6 @@
 import type { ReportInformation } from '../../../src/types/siear-api'
 import { buildReportExtractionPrompt } from './prompts/report-extraction.prompt'
+import type { WritingGenerationOptions } from './writing/writing-generation.options'
 
 const REPORT_FIELDS = [
   'equipment',
@@ -14,6 +15,7 @@ export interface StructuredTextGenerator {
   generateJson(
     prompt: string,
     schema?: Record<string, unknown>,
+    options?: WritingGenerationOptions,
   ): Promise<string>
 }
 
